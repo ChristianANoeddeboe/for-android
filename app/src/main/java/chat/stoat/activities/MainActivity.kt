@@ -88,6 +88,7 @@ import chat.stoat.composables.voice.VoicePermissionSwitch
 import chat.stoat.composables.voice.VoiceSheet
 import chat.stoat.core.model.data.StoatInstances
 import chat.stoat.core.model.schemas.HealthNotice
+import chat.stoat.dialogs.AppUpdateDialog
 import chat.stoat.internals.StoatWebLink
 import chat.stoat.internals.toStoatWebLinkOrNull
 import chat.stoat.material.EasingTokens
@@ -524,6 +525,8 @@ fun AppEntrypoint(
                         HealthAlert(notice = healthNotice, onDismiss = onDismissHealthAlert)
                     }
                 }
+
+                AppUpdateDialog()
 
                 if (couldNotLogIn) {
                     AlertDialog(

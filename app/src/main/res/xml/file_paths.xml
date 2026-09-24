@@ -5,4 +5,7 @@
     <cache-path
         path="usercards/"
         name="usercards" />
+    <cache-path
+        path="updates/"
+        name="updates" />
 </paths>
