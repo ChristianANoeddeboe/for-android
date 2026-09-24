@@ -72,8 +72,23 @@ android {
         }
     }
 
+    // Optional: sign release builds locally when a keystore is configured,
+    // otherwise the release APK is left unsigned for external signing.
+    val releaseKeystore = buildproperty("signing.store_file", "RVX_SIGNING_STORE_FILE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystore)
+                storePassword = buildproperty("signing.store_password", "RVX_SIGNING_STORE_PASSWORD")
+                keyAlias = buildproperty("signing.key_alias", "RVX_SIGNING_KEY_ALIAS")
+                keyPassword = buildproperty("signing.key_password", "RVX_SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
