@@ -58,6 +58,7 @@ import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import logcat.asLog
 import logcat.logcat
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.SocketException
 import kotlin.time.Duration.Companion.seconds
 import chat.stoat.core.model.schemas.Channel as ChannelSchema
@@ -122,7 +123,12 @@ val StoatHttp = HttpClient(OkHttp) {
         addInterceptor { chain ->
             val request = chain.request().newBuilder()
                 .apply {
-                    if (chain.request().headers[StoatAPI.TOKEN_HEADER_NAME] == null) {
+                    // Only send the session token to the active instance's API, never to
+                    // third-party or official Stoat hosts when logged into another instance.
+                    val apiHost = STOAT_BASE.toHttpUrlOrNull()?.host
+                    if (chain.request().headers[StoatAPI.TOKEN_HEADER_NAME] == null &&
+                        chain.request().url.host == apiHost
+                    ) {
                         header(StoatAPI.TOKEN_HEADER_NAME, StoatAPI.sessionToken)
                     }
                 }

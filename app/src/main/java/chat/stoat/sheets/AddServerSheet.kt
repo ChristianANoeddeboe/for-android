@@ -320,7 +320,7 @@ fun AddServerSheet(onDismiss: () -> Unit) {
                                         return@Button
                                     }
                                 } else {
-                                    "https://$STOAT_WEB_APP/invite/${inviteState.text}".toUri()
+                                    "$STOAT_WEB_APP/invite/${inviteState.text}".toUri()
                                 }
                                 context.startActivity(intent)
 

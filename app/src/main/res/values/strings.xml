@@ -26,6 +26,14 @@
     <string name="show_password">Show password</string>
 
     <string name="login">Log In</string>
+    <string name="instance_label">Server</string>
+    <string name="instance_change">Change</string>
+    <string name="instance_dialog_title">Choose server</string>
+    <string name="instance_dialog_body">Enter the address of a self-hosted Stoat server, or use the official one.</string>
+    <string name="instance_dialog_hint">chat.example.com</string>
+    <string name="instance_dialog_use_official">Use stoat.chat</string>
+    <string name="instance_dialog_connect">Connect</string>
+    <string name="instance_dialog_error">Could not find a Stoat server at that address</string>
     <string name="signup">Sign Up</string>
     <string name="resend">Resend</string>
     <string name="send_email">Send email</string>

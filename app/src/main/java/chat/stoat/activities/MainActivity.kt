@@ -86,6 +86,7 @@ import chat.stoat.c2dm.NotificationDeepLink
 import chat.stoat.composables.generic.HealthAlert
 import chat.stoat.composables.voice.VoicePermissionSwitch
 import chat.stoat.composables.voice.VoiceSheet
+import chat.stoat.core.model.data.StoatInstances
 import chat.stoat.core.model.schemas.HealthNotice
 import chat.stoat.internals.StoatWebLink
 import chat.stoat.internals.toStoatWebLinkOrNull
@@ -293,6 +294,8 @@ class MainActivityViewModel(
     val isAlertActive = MutableStateFlow(false)
 
     private fun doHealthCheck() {
+        // Health notices describe the official Stoat service only.
+        if (!StoatInstances.isOfficial) return
         viewModelScope.launch {
             try {
                 val health = healthCheck()

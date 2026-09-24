@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.os.StrictMode
+import chat.stoat.api.instance.InstanceManager
 import chat.stoat.di.appModule
 import chat.stoat.di.viewModelModule
 import coil3.ImageLoader
@@ -25,6 +26,7 @@ class StoatApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        InstanceManager.load(this)
         AndroidLogcatLogger.installOnDebuggableApp(this, minPriority = LogPriority.VERBOSE)
 
         if (BuildConfig.DEBUG) {

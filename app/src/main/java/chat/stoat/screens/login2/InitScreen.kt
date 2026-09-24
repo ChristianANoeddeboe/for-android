@@ -37,6 +37,7 @@ import chat.stoat.api.settings.LoadedSettings
 import chat.stoat.composables.generic.AnyLink
 import chat.stoat.composables.generic.Weblink
 import chat.stoat.core.model.data.STOAT_MARKETING
+import chat.stoat.core.model.data.StoatInstances
 import chat.stoat.ui.theme.Theme
 import com.chuckerteam.chucker.api.Chucker
 
@@ -154,18 +155,20 @@ private fun LinkPart(windowSizeClass: WindowSizeClass) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Weblink(
-            text = stringResource(R.string.terms_of_service),
-            url = "$STOAT_MARKETING/terms"
-        )
-        Weblink(
-            text = stringResource(R.string.privacy_policy),
-            url = "$STOAT_MARKETING/privacy"
-        )
-        Weblink(
-            text = stringResource(R.string.community_guidelines),
-            url = "$STOAT_MARKETING/aup"
-        )
+        if (StoatInstances.isOfficial) {
+            Weblink(
+                text = stringResource(R.string.terms_of_service),
+                url = "$STOAT_MARKETING/terms"
+            )
+            Weblink(
+                text = stringResource(R.string.privacy_policy),
+                url = "$STOAT_MARKETING/privacy"
+            )
+            Weblink(
+                text = stringResource(R.string.community_guidelines),
+                url = "$STOAT_MARKETING/aup"
+            )
+        }
 
         if (BuildConfig.DEBUG) {
             AnyLink(

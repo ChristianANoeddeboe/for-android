@@ -67,6 +67,7 @@ import chat.stoat.api.routes.user.fetchSelf
 import chat.stoat.composables.generic.NonIdealState
 import chat.stoat.composables.screens.settings.UserOverview
 import chat.stoat.composables.skeletons.UserOverviewSkeleton
+import chat.stoat.core.model.data.StoatInstances
 import chat.stoat.core.model.schemas.User
 import chat.stoat.internals.extensions.zero
 import chat.stoat.screens.chat.LocalIsConnected
@@ -354,34 +355,36 @@ fun OverviewScreen(
                             )
                         }
 
-                        item(key = "join-lounge") {
-                            OverviewScreenLink(
-                                onClick = {
-                                    val intent = Intent(
-                                        context,
-                                        InviteActivity::class.java
-                                    ).setAction(Intent.ACTION_VIEW)
+                        if (StoatInstances.isOfficial) {
+                            item(key = "join-lounge") {
+                                OverviewScreenLink(
+                                    onClick = {
+                                        val intent = Intent(
+                                            context,
+                                            InviteActivity::class.java
+                                        ).setAction(Intent.ACTION_VIEW)
 
-                                    intent.data = "https://stt.gg/Testers".toUri()
-                                    context.startActivity(intent)
-                                },
-                                backgroundColour = MaterialTheme.colorScheme.primary,
-                                foregroundColour = MaterialTheme.colorScheme.onPrimary,
-                                title = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_waving_hand_24dp),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Text(stringResource(R.string.overview_screen_join_lounge))
-                                    }
-                                },
-                                body = { Text(stringResource(R.string.overview_screen_join_lounge_description)) }
-                            )
+                                        intent.data = "https://stt.gg/Testers".toUri()
+                                        context.startActivity(intent)
+                                    },
+                                    backgroundColour = MaterialTheme.colorScheme.primary,
+                                    foregroundColour = MaterialTheme.colorScheme.onPrimary,
+                                    title = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_waving_hand_24dp),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                            Text(stringResource(R.string.overview_screen_join_lounge))
+                                        }
+                                    },
+                                    body = { Text(stringResource(R.string.overview_screen_join_lounge_description)) }
+                                )
+                            }
                         }
                     }
 

@@ -1,6 +1,5 @@
 package chat.stoat.screens.chat.dialogs
 
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
@@ -139,7 +138,7 @@ fun InviteDialog(channelId: String, onDismissRequest: () -> Unit) {
             Spacer(Modifier.height(16.dp))
 
             Text(
-                (Uri.parse(STOAT_INVITES).host ?: "rvlt.gg") + "/",
+                STOAT_INVITES.substringAfter("://") + "/",
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier

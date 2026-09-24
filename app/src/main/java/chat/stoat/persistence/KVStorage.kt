@@ -50,4 +50,12 @@ class KVStorage(
             preferences.remove(stringPreferencesKey(key))
         }
     }
+
+    suspend fun removeWhere(predicate: (String) -> Boolean) {
+        dataStore.edit { preferences ->
+            preferences.asMap().keys
+                .filter { predicate(it.name) }
+                .forEach { preferences.remove(it) }
+        }
+    }
 }

@@ -94,6 +94,7 @@ import chat.stoat.composables.generic.bottomEndCircleCutout
 import chat.stoat.composables.generic.presenceFromStatus
 import chat.stoat.composables.screens.chat.ChannelIcon
 import chat.stoat.core.model.data.STOAT_FILES
+import chat.stoat.core.model.data.StoatInstances
 import chat.stoat.core.model.schemas.Category
 import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
@@ -464,7 +465,7 @@ fun ChannelSideDrawer(
                 }
             }
 
-            item(key = "discover") {
+            if (StoatInstances.isOfficial) item(key = "discover") {
                 Box(
                     Modifier
                         .padding(8.dp)

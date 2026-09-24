@@ -47,6 +47,7 @@ import chat.stoat.R
 import chat.stoat.composables.generic.AnyLink
 import chat.stoat.composables.generic.Weblink
 import chat.stoat.core.model.data.STOAT_MARKETING
+import chat.stoat.core.model.data.StoatInstances
 import com.chuckerteam.chucker.api.Chucker
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -55,6 +56,7 @@ fun LoginGreetingScreen(navController: NavController) {
     val context = LocalContext.current
     var catTaps by remember { mutableIntStateOf(0) }
     var showBoringButton by remember { mutableStateOf(false) }
+    var isOfficial by remember { mutableStateOf(StoatInstances.isOfficial) }
 
     Column(
         modifier = Modifier
@@ -129,6 +131,11 @@ fun LoginGreetingScreen(navController: NavController) {
             )
         }
 
+        InstanceSelector(
+            modifier = Modifier.padding(bottom = 10.dp),
+            onChanged = { isOfficial = StoatInstances.isOfficial }
+        )
+
         Column(
             modifier = Modifier
                 .width(200.dp),
@@ -181,18 +188,20 @@ fun LoginGreetingScreen(navController: NavController) {
             CompositionLocalProvider(
                 LocalTextStyle provides LocalTextStyle.current.copy(textAlign = TextAlign.Center)
             ) {
-                Weblink(
-                    text = stringResource(R.string.terms_of_service),
-                    url = "$STOAT_MARKETING/terms"
-                )
-                Weblink(
-                    text = stringResource(R.string.privacy_policy),
-                    url = "$STOAT_MARKETING/privacy"
-                )
-                Weblink(
-                    text = stringResource(R.string.community_guidelines),
-                    url = "$STOAT_MARKETING/aup"
-                )
+                if (isOfficial) {
+                    Weblink(
+                        text = stringResource(R.string.terms_of_service),
+                        url = "$STOAT_MARKETING/terms"
+                    )
+                    Weblink(
+                        text = stringResource(R.string.privacy_policy),
+                        url = "$STOAT_MARKETING/privacy"
+                    )
+                    Weblink(
+                        text = stringResource(R.string.community_guidelines),
+                        url = "$STOAT_MARKETING/aup"
+                    )
+                }
                 if (BuildConfig.DEBUG) {
                     AnyLink(
                         text = "Debug: Chucker",
