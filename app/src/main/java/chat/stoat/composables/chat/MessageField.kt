@@ -207,6 +207,14 @@ fun MessageField(
         textFieldState.setTextAndPlaceCursorAtEnd(initialValue)
     }
 
+    val emoticonTransformation = remember { EmoticonInputTransformation() }
+    val sendMessage = {
+        if (emoticonTransformation.convertTrailing(textFieldState)) {
+            onValueChange(textFieldState.text.toString())
+        }
+        onSendMessage()
+    }
+
     val scope = rememberCoroutineScope()
 
     // Only members seen in loaded messages are cached, so the full member list is
@@ -546,6 +554,7 @@ fun MessageField(
 
             BasicTextField(
                 state = textFieldState,
+                inputTransformation = emoticonTransformation,
                 textStyle = LocalTextStyle.current.copy(
                     color = if (failedValidation) {
                         MaterialTheme.colorScheme.error
@@ -576,7 +585,7 @@ fun MessageField(
                                         it.isCtrlPressed &&
                                         !it.isMetaPressed -> {
                                     if (sendEnabled) {
-                                        onSendMessage()
+                                        sendMessage()
                                     }
                                     return@onKeyEvent true
                                 }
@@ -662,7 +671,7 @@ fun MessageField(
                     modifier = Modifier
                         .padding(end = 8.dp)
                         .clip(CircleShape)
-                        .clickable(enabled = sendEnabled) { onSendMessage() }
+                        .clickable(enabled = sendEnabled) { sendMessage() }
                         .size(32.dp)
                         .padding(4.dp)
                         .testTag("send_message")
