@@ -490,7 +490,7 @@ class ChannelScreenViewModel(
         // 1. they will be cleared
         // 2. if the user changes the content while the message is being sent we want to persist
         //    the original content
-        val content = MessageProcessor.processOutgoing(draftContent, channel?.server)
+        val content = MessageProcessor.processOutgoing(draftContent, channel?.server, channel?.id)
         val replyTo = draftReplyTo.toList()
         val returnToLatestBeforeRenderingSend = canLoadNewer
 

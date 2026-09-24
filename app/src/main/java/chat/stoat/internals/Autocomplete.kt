@@ -6,9 +6,11 @@ import chat.stoat.api.internals.Roles
 import chat.stoat.api.internals.has
 import chat.stoat.composables.chat.AutocompleteSuggestion
 import chat.stoat.core.model.schemas.ChannelType
+import chat.stoat.core.model.schemas.User
 
 object Autocomplete {
     private val emojiImpl = EmojiImpl()
+    private const val MAX_MEMBER_SUGGESTIONS = 50
 
     fun emoji(query: String): List<AutocompleteSuggestion.Emoji> {
         val unicodeResults = emojiImpl.shortcodeContains(query).map {
@@ -65,7 +67,7 @@ object Autocomplete {
                 val otherUser = channel.recipients?.find { it != StoatAPI.selfId }
                 if (otherUser != null) {
                     val user = StoatAPI.userCache[otherUser]
-                    if (user != null && user.username?.contains(query, ignoreCase = true) == true) {
+                    if (user != null && user.matches(query)) {
                         listOf(
                             AutocompleteSuggestion.User(
                                 user,
@@ -85,7 +87,7 @@ object Autocomplete {
                 val users =
                     channel.recipients?.mapNotNull { StoatAPI.userCache[it] } ?: emptyList()
                 users
-                    .filter { it.username?.contains(query, ignoreCase = true) ?: false }
+                    .filter { it.matches(query) }
                     .map {
                         AutocompleteSuggestion.User(
                             it,
@@ -97,11 +99,7 @@ object Autocomplete {
 
             ChannelType.SavedMessages -> {
                 val user = StoatAPI.userCache[StoatAPI.selfId]
-                return if (user != null && user.username?.contains(
-                        query,
-                        ignoreCase = true
-                    ) == true
-                ) {
+                return if (user != null && user.matches(query)) {
                     listOf(
                         AutocompleteSuggestion.User(
                             user,
@@ -116,7 +114,6 @@ object Autocomplete {
 
             ChannelType.TextChannel, ChannelType.VoiceChannel -> {
                 if (serverId == null) return emptyList()
-                if (query.length < 2) return emptyList()
 
                 val roles =
                     if (selfPermissions has PermissionBit.MentionRoles) StoatAPI.serverCache[serverId]?.roles
@@ -128,10 +125,7 @@ object Autocomplete {
                         m to u!!
                     }
                 val byUsername = StoatAPI.userCache.values.filter {
-                    it.username?.contains(
-                        query,
-                        ignoreCase = true
-                    ) == true
+                    it.matches(query)
                 }.mapNotNull {
                     it.id?.let { id ->
                         StoatAPI.members.getMember(
@@ -171,6 +165,7 @@ object Autocomplete {
                             else -> ""
                         }
                     }
+                    .take(MAX_MEMBER_SUGGESTIONS)
             }
 
             null -> emptyList()
@@ -178,6 +173,10 @@ object Autocomplete {
             AutocompleteSuggestion.MassMention(mention)
         } else listOf()
     }
+
+    private fun User.matches(query: String): Boolean =
+        username?.contains(query, ignoreCase = true) == true ||
+            displayName?.contains(query, ignoreCase = true) == true
 
     fun channel(
         serverId: String,

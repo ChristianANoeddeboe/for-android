@@ -1,6 +1,7 @@
 package chat.stoat.composables.chat
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandIn
 import androidx.compose.animation.fadeIn
@@ -83,13 +84,16 @@ import chat.stoat.R
 import chat.stoat.activities.StoatTweenFloat
 import chat.stoat.activities.StoatTweenInt
 import chat.stoat.api.internals.BrushCompat
-import chat.stoat.core.model.schemas.ChannelType
-import chat.stoat.core.model.schemas.Member
+import chat.stoat.api.routes.server.fetchMembers
 import chat.stoat.composables.generic.RemoteImage
 import chat.stoat.composables.generic.UserAvatar
 import chat.stoat.composables.screens.chat.ChannelIcon
 import chat.stoat.core.model.data.STOAT_FILES
+import chat.stoat.core.model.schemas.ChannelType
+import chat.stoat.core.model.schemas.Member
 import chat.stoat.internals.Autocomplete
+import chat.stoat.sheets.DO_NOT_FETCH_OFFLINE_MEMBERS_SERVERS
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 fun Pair<Int, Int>.asTextRange(): TextRange {
@@ -101,12 +105,12 @@ private fun CharSequence.isEmptyOrOnlyNewlines(): Boolean {
 }
 
 private fun TextFieldState.lastWord(): String? {
-    return this.text.substring(0, this.selection.min)
-        .split(" ").lastOrNull()
+    val beforeCursor = this.text.substring(0, this.selection.min)
+    return beforeCursor.substring(beforeCursor.lastWordStartsAt() + 1)
 }
 
 private fun CharSequence.lastWordStartsAt(): Int {
-    return this.lastIndexOf(" ")
+    return this.indexOfLast { it.isWhitespace() }
 }
 
 sealed class AutocompleteSuggestion {
@@ -205,9 +209,30 @@ fun MessageField(
 
     val scope = rememberCoroutineScope()
 
+    // Only members seen in loaded messages are cached, so the full member list is
+    // fetched the first time a mention is started in a server channel
+    var mentionStarted by remember(serverId) { mutableStateOf(false) }
+    var membersLoaded by remember(serverId) { mutableStateOf(false) }
+
+    LaunchedEffect(serverId, mentionStarted) {
+        if (serverId == null || !mentionStarted || membersLoaded) return@LaunchedEffect
+        try {
+            fetchMembers(
+                serverId = serverId,
+                includeOffline = serverId !in DO_NOT_FETCH_OFFLINE_MEMBERS_SERVERS
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("MessageField", "Failed to fetch members for mention autocomplete", e)
+        }
+        membersLoaded = true
+    }
+
     LaunchedEffect(textFieldState.text) {
         onValueChange(textFieldState.text.toString())
+    }
 
+    LaunchedEffect(textFieldState.text, membersLoaded) {
         scope.launch {
             autocompleteSuggestionState.animateScrollToItem(0)
         }
@@ -226,7 +251,8 @@ fun MessageField(
                     }
 
                     lastWord.startsWith('@') -> {
-                        if (channelId != null && serverId != null) {
+                        if (serverId != null) mentionStarted = true
+                        if (channelId != null) {
                             autocompleteSuggestions.addAll(
                                 Autocomplete.userOrRole(
                                     channelId,
