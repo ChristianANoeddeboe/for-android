@@ -241,7 +241,8 @@ fun Message(
     fromWebhook: Boolean = false,
     webhookName: String? = null,
     modifier: Modifier = Modifier,
-    mdAst: State? = null
+    mdAst: State? = null,
+    showThreadChip: Boolean = true,
 ) {
     val author = StoatAPI.userCache[message.author] ?: return CircularProgressIndicator()
     val context = LocalContext.current
@@ -621,7 +622,7 @@ fun Message(
                         }
 
                         // Threads share their starter message's id, forum posts start inside the thread
-                        if (message.id != null && message.channel != message.id &&
+                        if (showThreadChip && message.id != null && message.channel != message.id &&
                             (message.flags has MessageFlag.HasThread ||
                                     StoatAPI.channelCache[message.id]?.isThread == true)
                         ) {

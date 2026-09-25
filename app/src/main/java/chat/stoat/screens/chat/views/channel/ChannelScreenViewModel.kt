@@ -34,6 +34,7 @@ import chat.stoat.api.routes.channel.SendMessageReply
 import chat.stoat.api.routes.channel.ackChannel
 import chat.stoat.api.routes.channel.editMessage
 import chat.stoat.api.routes.channel.fetchMessagesFromChannel
+import chat.stoat.api.routes.channel.fetchSingleMessage
 import chat.stoat.api.routes.channel.sendMessage
 import chat.stoat.api.routes.microservices.autumn.FileArgs
 import chat.stoat.api.routes.microservices.autumn.MAX_ATTACHMENTS_PER_MESSAGE
@@ -128,6 +129,10 @@ class ChannelScreenViewModel(
     var jumpFailure by mutableStateOf<MessageJumpFailure?>(null)
         private set
 
+    // The message a text channel thread was started from, which lives in the parent channel
+    var threadStarter by mutableStateOf<ChannelScreenItem.RegularMessage?>(null)
+        private set
+
     var ensuredSelfMember by mutableStateOf(false)
 
     var denyMessageField by mutableStateOf(false)
@@ -173,6 +178,7 @@ class ChannelScreenViewModel(
         this.hasUnseenNewMessages = false
         this.scrollRequest = null
         this.jumpFailure = null
+        this.threadStarter = null
         this.ensuredSelfMember = false
         this.denyMessageField = false
         this.denyMessageFieldReasonResource = R.string.typing_blank
@@ -202,6 +208,31 @@ class ChannelScreenViewModel(
         }
 
         this.loadLatest(markLastAsRead = true)
+
+        viewModelScope.launch {
+            loadThreadStarter(id)
+        }
+    }
+
+    private suspend fun loadThreadStarter(id: String) {
+        val thread = StoatAPI.channelCache[id]?.takeIf { it.isThread } ?: return
+        val parentId = thread.parent ?: return
+        // Forum posts start inside the thread itself
+        if (StoatAPI.channelCache[parentId]?.isForum == true) return
+
+        // Threads started without a message share their id with a system message instead
+        val message = try {
+            fetchSingleMessage(parentId, id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return
+        }
+        if (message.system != null) return
+
+        message.author?.let { addUserIfUnknown(it) }
+        if (channelId != id) return
+        threadStarter = ChannelScreenItem.RegularMessage(message.copy(tail = false), parseAst(message.content))
     }
 
     suspend fun unlockAgeGate() {

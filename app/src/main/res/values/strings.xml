@@ -293,6 +293,8 @@
     <string name="forum_sort_latest">Sort by recent activity</string>
     <string name="forum_sort_created">Sort by creation date</string>
     <string name="forum_sort">Sort</string>
+    <string name="forum_layout_list">List view</string>
+    <string name="forum_layout_gallery">Gallery view</string>
     <string name="forum_guidelines">Post guidelines</string>
     <string name="forum_post_title">Title</string>
     <string name="forum_post_message">Message</string>
@@ -307,6 +309,7 @@
     <string name="forum_post_closed">Closed</string>
     <string name="forum_post_locked">Locked</string>
     <string name="thread_create">Create thread</string>
+    <string name="thread_started_from">Started from this message</string>
     <string name="thread_name">Thread name</string>
     <string name="thread_private">Private thread</string>
     <string name="thread_private_description">Only people you invite and moderators can see this thread</string>

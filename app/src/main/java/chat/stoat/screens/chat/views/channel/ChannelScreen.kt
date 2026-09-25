@@ -83,6 +83,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -1148,6 +1149,26 @@ fun ChannelScreen(
                                                     MessageSkeleton(MessageSkeletonVariant.Three)
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                                // Reverse layout, so this sits above the oldest message
+                                val starter = viewModel.threadStarter
+                                if (starter != null && viewModel.didInitialChannelFetch && !viewModel.canLoadOlder) {
+                                    item(key = "thread_starter", contentType = "ThreadStarter") {
+                                        Column(Modifier.padding(bottom = 8.dp)) {
+                                            Text(
+                                                stringResource(R.string.thread_started_from),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                            )
+                                            Message(
+                                                message = starter.message,
+                                                mdAst = starter.mdAst,
+                                                showThreadChip = false,
+                                            )
+                                            HorizontalDivider(Modifier.padding(top = 8.dp))
                                         }
                                     }
                                 }
