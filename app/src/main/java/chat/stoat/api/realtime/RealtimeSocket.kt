@@ -30,6 +30,8 @@ import chat.stoat.api.realtime.frames.receivable.ServerMemberUpdateFrame
 import chat.stoat.api.realtime.frames.receivable.ServerRoleDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.ServerRoleUpdateFrame
 import chat.stoat.api.realtime.frames.receivable.ServerUpdateFrame
+import chat.stoat.api.realtime.frames.receivable.ThreadMemberUpdateFrame
+import chat.stoat.api.realtime.frames.receivable.ThreadMembersUpdateFrame
 import chat.stoat.api.realtime.frames.receivable.UserMoveVoiceChannelFrame
 import chat.stoat.api.realtime.frames.receivable.UserRelationshipFrame
 import chat.stoat.api.realtime.frames.receivable.UserSlowmodesFrame
@@ -236,9 +238,15 @@ object RealtimeSocket {
                 val channelMap = readyFrame.channels.associateBy { it.id!! }
                 StoatAPI.channelCache.putAll(channelMap)
 
+                readyFrame.threadMembers?.let { members ->
+                    StoatAPI.threadMembers.clear()
+                    StoatAPI.threadMembers.putAll(members.associateBy { it.id.thread })
+                }
+
                 // Cache channels in persistent local database
                 readyFrame.channels.map {
-                    if (it.id == null || it.name == null) {
+                    // Threads are only kept in memory, they come with every Ready
+                    if (it.id == null || it.name == null || it.isThread) {
                         return@map
                     }
 
@@ -262,6 +270,11 @@ object RealtimeSocket {
                 val channelsThatExist = readyFrame.channels.mapNotNull { it.id }
                 val channelsInDatabase = database.channelQueries.selectAllIds().executeAsList()
                 val channelsToDelete = channelsInDatabase.filter { it !in channelsThatExist }
+
+                StoatAPI.channelCache.values
+                    .filter { it.isThread && it.id !in channelsThatExist }
+                    .mapNotNull { it.id }
+                    .forEach { StoatAPI.channelCache.remove(it) }
 
                 channelsToDelete.forEach {
                     database.channelQueries.delete(it)
@@ -309,8 +322,16 @@ object RealtimeSocket {
                         return
                     }
 
-                    StoatAPI.channelCache[it] =
-                        StoatAPI.channelCache[it]!!.copy(lastMessageID = messageFrame.id)
+                    val channel = StoatAPI.channelCache[it]!!
+                    StoatAPI.channelCache[it] = channel.copy(
+                        lastMessageID = messageFrame.id,
+                        // Thread message counts exclude the starter message
+                        messageCount = if (channel.isThread && messageFrame.id != channel.id) {
+                            (channel.messageCount ?: 0) + 1
+                        } else {
+                            channel.messageCount
+                        }
+                    )
 
                     StoatAPI.wsFrameChannel.emit(messageFrame)
                 }
@@ -532,6 +553,8 @@ object RealtimeSocket {
                     StoatAPI.userSlowmodeCache.remove(channelUpdateFrame.id)
                 }
 
+                if (combined.isThread) return
+
                 database.channelQueries.upsert(
                     channelUpdateFrame.id,
                     combined.channelType?.value ?: ChannelType.TextChannel.value,
@@ -558,6 +581,8 @@ object RealtimeSocket {
                 )
 
                 StoatAPI.channelCache[channelCreateFrame.id!!] = channelCreateFrame
+                if (channelCreateFrame.isThread) return
+
                 database.channelQueries.upsert(
                     channelCreateFrame.id!!,
                     channelCreateFrame.channelType?.value ?: ChannelType.TextChannel.value,
@@ -592,6 +617,7 @@ object RealtimeSocket {
                 }
 
                 StoatAPI.channelCache.remove(channelDeleteFrame.id)
+                StoatAPI.threadMembers.remove(channelDeleteFrame.id)
                 StoatAPI.userSlowmodeCache.remove(channelDeleteFrame.id)
                 database.channelQueries.delete(channelDeleteFrame.id)
 
@@ -613,6 +639,27 @@ object RealtimeSocket {
                 }
 
                 StoatAPI.wsFrameChannel.emit(channelDeleteFrame)
+            }
+
+            "ThreadMemberUpdate" -> {
+                val frame =
+                    StoatJson.decodeFromString(ThreadMemberUpdateFrame.serializer(), rawFrame)
+
+                if (frame.member != null) {
+                    StoatAPI.threadMembers[frame.id] = frame.member!!
+                } else {
+                    StoatAPI.threadMembers.remove(frame.id)
+                }
+            }
+
+            "ThreadMembersUpdate" -> {
+                val frame =
+                    StoatJson.decodeFromString(ThreadMembersUpdateFrame.serializer(), rawFrame)
+
+                StoatAPI.channelCache[frame.id]?.let {
+                    StoatAPI.channelCache[frame.id] = it.copy(memberCount = frame.memberCount)
+                }
+                StoatAPI.wsFrameChannel.emit(frame)
             }
 
             "ChannelAck" -> {

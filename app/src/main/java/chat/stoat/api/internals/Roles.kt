@@ -79,7 +79,41 @@ object Roles {
             ChannelType.DirectMessage -> BitDefaults.DirectMessages
             ChannelType.Group -> if (channel.owner == user?.id) PermissionBit.GrantAllSafe.value else BitDefaults.DirectMessages
 
-            ChannelType.TextChannel, ChannelType.VoiceChannel -> {
+            ChannelType.Thread -> {
+                // Threads use the permissions of their parent channel
+                val parent = StoatAPI.channelCache[channel.parent] ?: return 0L
+                val server = StoatAPI.serverCache[channel.server]
+                    ?: return PermissionBit.GrantAllSafe.value
+                if (server.owner == user?.id) return PermissionBit.GrantAllSafe.value
+
+                var calculated = permissionFor(parent, user, member)
+                if (!calculated.hasPermission(PermissionBit.ViewChannel)) return 0L
+
+                val manageThreads = calculated.hasPermission(PermissionBit.ManageThreads)
+                val joined = channel.id in StoatAPI.threadMembers || channel.owner == user?.id
+                if (channel.private == true && !joined && !manageThreads) return 0L
+
+                // Sending is governed by SendMessagesInThreads, managing by ManageThreads
+                val send = calculated.hasPermission(PermissionBit.SendMessagesInThreads)
+                calculated = calculated and (
+                    PermissionBit.SendMessage + PermissionBit.ManageChannel +
+                        PermissionBit.ManagePermissions + PermissionBit.ManageWebhooks +
+                        PermissionBit.InviteOthers + PermissionBit.CreatePublicThreads +
+                        PermissionBit.CreatePrivateThreads
+                    ).inv()
+
+                if (send) calculated = calculated or PermissionBit.SendMessage.value
+                if (manageThreads) calculated = calculated or PermissionBit.ManageChannel.value
+
+                if (channel.locked == true && !manageThreads) {
+                    calculated = calculated and
+                        (PermissionBit.SendMessage + PermissionBit.React).inv()
+                }
+
+                calculated
+            }
+
+            ChannelType.TextChannel, ChannelType.VoiceChannel, ChannelType.ForumChannel -> {
                 val server = StoatAPI.serverCache[channel.server]
                 // FIXME this is a stupid patch to prevent it from showing "no permission" on a channel on launch
                     ?: return PermissionBit.GrantAllSafe.value

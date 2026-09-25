@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import chat.stoat.R
+import chat.stoat.screens.chat.views.thread.ThreadChip
 import chat.stoat.activities.media.ImageViewActivity
 import chat.stoat.activities.media.VideoViewActivity
 import chat.stoat.api.StoatAPI
@@ -617,6 +618,14 @@ fun Message(
                                     }
                                 }
                             }
+                        }
+
+                        // Threads share their starter message's id, forum posts start inside the thread
+                        if (message.id != null && message.channel != message.id &&
+                            (message.flags has MessageFlag.HasThread ||
+                                    StoatAPI.channelCache[message.id]?.isThread == true)
+                        ) {
+                            ThreadChip(threadId = message.id!!)
                         }
 
                         val reactionsAndInteractions = remember(message.reactions) {

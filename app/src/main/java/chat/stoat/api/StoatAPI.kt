@@ -18,6 +18,7 @@ import chat.stoat.core.model.schemas.ChannelType
 import chat.stoat.core.model.schemas.Emoji
 import chat.stoat.core.model.schemas.Message
 import chat.stoat.core.model.schemas.Server
+import chat.stoat.core.model.schemas.ThreadMember
 import chat.stoat.core.model.schemas.User
 import chat.stoat.core.model.util.ChannelVoiceState
 import chat.stoat.persistence.Database
@@ -175,6 +176,11 @@ object StoatAPI {
     val voiceStateCache = mutableStateMapOf<String, ChannelVoiceState>()
     val userSlowmodeCache = mutableStateMapOf<String, ActiveSlowmode>()
 
+    /**
+     * Our memberships of threads, by thread id
+     */
+    val threadMembers = mutableStateMapOf<String, ThreadMember>()
+
     val members = Members()
 
     val unreads = Unreads()
@@ -323,6 +329,7 @@ object StoatAPI {
         emojiCache.clear()
         messageCache.clear()
         userSlowmodeCache.clear()
+        threadMembers.clear()
 
         members.clear()
         unreads.clear()
@@ -401,7 +408,7 @@ object StoatAPI {
                 ),
                 flags = it.flags,
                 channels = channels
-                    .filter { c -> c.server == it.id }
+                    .filter { c -> c.server == it.id && !c.isThread }
                     .filterNot { c -> c.id == null }
                     .map { c -> c.id!! },
             )

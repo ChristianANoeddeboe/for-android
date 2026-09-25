@@ -92,6 +92,7 @@ import chat.stoat.screens.chat.dialogs.safety.ReportServerDialog
 import chat.stoat.screens.chat.dialogs.safety.ReportUserDialog
 import chat.stoat.screens.chat.views.FriendsScreen
 import chat.stoat.screens.chat.views.NoCurrentChannelScreen
+import chat.stoat.screens.chat.views.forum.ForumScreen
 import chat.stoat.screens.chat.views.OverviewScreen
 import chat.stoat.screens.chat.views.channel.ChannelScreen
 import chat.stoat.sheets.AddServerSheet
@@ -239,8 +240,12 @@ class ChatRouterViewModel(
             kvStorage.set("currentDestination", destination.asSerialisedString())
 
             if (destination is ChatRouterDestination.Channel) {
-                val server = StoatAPI.channelCache[destination.channelId]?.server
-                if (server != null) {
+                val channel = StoatAPI.channelCache[destination.channelId]
+                val server = channel?.server
+                // Threads are not cached across launches, remember their parent instead
+                if (server != null && channel.isThread) {
+                    channel.parent?.let { kvStorage.set("lastChannel/$server", it) }
+                } else if (server != null) {
                     kvStorage.set("lastChannel/$server", destination.channelId)
                 }
             }
@@ -1093,6 +1098,22 @@ fun ChannelNavigator(
                     topNav = topNav,
                     useDrawer = useDrawer,
                     onDrawerClicked = toggleDrawer,
+                )
+            }
+
+            is ChatRouterDestination.Channel if StoatAPI.channelCache[dest.channelId]?.isForum == true -> {
+                ForumScreen(
+                    channelId = dest.channelId,
+                    useDrawer = useDrawer,
+                    onToggleDrawer = {
+                        scope.launch {
+                            if (drawerState?.isOpen == true) {
+                                drawerState.close()
+                            } else {
+                                drawerState?.open()
+                            }
+                        }
+                    }
                 )
             }
 

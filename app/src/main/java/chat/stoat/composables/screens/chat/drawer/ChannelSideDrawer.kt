@@ -143,6 +143,7 @@ fun ChannelSideDrawer(
             val channelIndex = categorisedChannels?.indexOfFirst {
                 when (it) {
                     is CategorisedChannelList.Channel -> it.channel.id == currentDestination.channelId
+                    is CategorisedChannelList.Thread -> it.thread.id == currentDestination.channelId
                     else -> false
                 }
             } ?: 0
@@ -882,6 +883,30 @@ fun ColumnScope.ServerChannelListRenderer(
 
                 is CategorisedChannelList.Category -> {
                     CategoryItem(category = channelOrCat.category)
+                }
+
+                is CategorisedChannelList.Thread -> {
+                    Box(Modifier.padding(start = 24.dp)) {
+                        ChannelItem(
+                            channel = channelOrCat.thread,
+                            isCurrent = (currentDestination as? ChatRouterDestination.Channel)
+                                ?.channelId == channelOrCat.thread.id,
+                            onDestinationChanged = {
+                                onDestinationChanged(it)
+                                scope.launch {
+                                    drawerState?.close()
+                                }
+                            },
+                            hasUnread = channelOrCat.thread.lastMessageID?.let { lastMessageID ->
+                                StoatAPI.unreads.hasUnread(
+                                    channelOrCat.thread.id!!,
+                                    lastMessageID,
+                                    serverId
+                                )
+                            } ?: false,
+                            onOpenChannelContextSheet = onOpenChannelContextSheet
+                        )
+                    }
                 }
 
                 else -> {}

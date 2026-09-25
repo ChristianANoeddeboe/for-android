@@ -79,8 +79,52 @@ data class Channel(
     val nsfw: Boolean? = null,
     val voice: VoiceInformation? = null,
     val slowmode: Long? = null,
+
+    // Text and forum channels
+    @SerialName("default_auto_archive_minutes")
+    val defaultAutoArchiveMinutes: Int? = null,
+
+    // Forum channels
+    @SerialName("available_tags")
+    val availableTags: List<ForumTag>? = null,
+    @SerialName("require_tag")
+    val requireTag: Boolean? = null,
+    @SerialName("default_reaction_emoji")
+    val defaultReactionEmoji: String? = null,
+    @SerialName("default_sort_order")
+    val defaultSortOrder: ForumSortOrder? = null,
+    @SerialName("default_layout")
+    val defaultLayout: ForumLayout? = null,
+    @SerialName("default_thread_slowmode")
+    val defaultThreadSlowmode: Long? = null,
+
+    // Threads (forum posts are threads in a forum channel)
+    val parent: String? = null,
+    val private: Boolean? = null,
+    val invitable: Boolean? = null,
+    @SerialName("applied_tags")
+    val appliedTags: List<String>? = null,
+    val pinned: Boolean? = null,
+    val archived: Boolean? = null,
+    val locked: Boolean? = null,
+    @SerialName("auto_archive_minutes")
+    val autoArchiveMinutes: Int? = null,
+    @SerialName("archived_at")
+    val archivedAt: String? = null,
+    @SerialName("message_count")
+    val messageCount: Int? = null,
+    @SerialName("member_count")
+    val memberCount: Int? = null,
+
     val type: String? = null // this is _only_ used for websocket events!
 ) {
+    val isThread: Boolean
+        get() = channelType == ChannelType.Thread
+
+    val isForum: Boolean
+        get() = channelType == ChannelType.ForumChannel
+
+
     fun mergeWithPartial(partial: Channel): Channel {
         return Channel(
             channelType = partial.channelType ?: channelType,
@@ -100,10 +144,82 @@ data class Channel(
             nsfw = partial.nsfw ?: nsfw,
             voice = partial.voice ?: voice,
             slowmode = partial.slowmode ?: slowmode,
+            defaultAutoArchiveMinutes = partial.defaultAutoArchiveMinutes
+                ?: defaultAutoArchiveMinutes,
+            availableTags = partial.availableTags ?: availableTags,
+            requireTag = partial.requireTag ?: requireTag,
+            defaultReactionEmoji = partial.defaultReactionEmoji ?: defaultReactionEmoji,
+            defaultSortOrder = partial.defaultSortOrder ?: defaultSortOrder,
+            defaultLayout = partial.defaultLayout ?: defaultLayout,
+            defaultThreadSlowmode = partial.defaultThreadSlowmode ?: defaultThreadSlowmode,
+            parent = partial.parent ?: parent,
+            private = partial.private ?: private,
+            invitable = partial.invitable ?: invitable,
+            appliedTags = partial.appliedTags ?: appliedTags,
+            pinned = partial.pinned ?: pinned,
+            archived = partial.archived ?: archived,
+            locked = partial.locked ?: locked,
+            autoArchiveMinutes = partial.autoArchiveMinutes ?: autoArchiveMinutes,
+            archivedAt = partial.archivedAt ?: archivedAt,
+            messageCount = partial.messageCount ?: messageCount,
+            memberCount = partial.memberCount ?: memberCount,
             type = partial.type ?: type
         )
     }
 }
+
+@Serializable
+data class ForumTag(
+    val id: String = "",
+    val name: String,
+    val emoji: String? = null,
+    val moderated: Boolean = false
+)
+
+@Serializable
+enum class ForumSortOrder {
+    LatestActivity,
+    CreationDate
+}
+
+@Serializable
+enum class ForumLayout {
+    List,
+    Gallery
+}
+
+@Serializable
+enum class ThreadNotify {
+    Default,
+    All,
+    Mentions,
+    None
+}
+
+@Serializable
+data class ThreadMemberKey(
+    val thread: String,
+    val user: String
+)
+
+@Serializable
+data class ThreadMember(
+    @SerialName("_id")
+    val id: ThreadMemberKey,
+    @SerialName("joined_at")
+    val joinedAt: String? = null,
+    val notify: ThreadNotify = ThreadNotify.Default
+)
+
+@Serializable
+data class ThreadList(
+    val threads: List<Channel> = emptyList(),
+    val members: List<ThreadMember> = emptyList(),
+    @SerialName("has_more")
+    val hasMore: Boolean = false,
+    val messages: List<Message> = emptyList(),
+    val users: List<User> = emptyList()
+)
 
 @Serializable
 data class VoiceInformation(
@@ -126,7 +242,9 @@ enum class ChannelType(val value: String) {
     Group("Group"),
     SavedMessages("SavedMessages"),
     TextChannel("TextChannel"),
-    VoiceChannel("VoiceChannel");
+    VoiceChannel("VoiceChannel"),
+    ForumChannel("ForumChannel"),
+    Thread("Thread");
 
     companion object : KSerializer<ChannelType> {
         override val descriptor: SerialDescriptor
@@ -144,6 +262,8 @@ enum class ChannelType(val value: String) {
                 "SavedMessages" -> SavedMessages
                 "TextChannel" -> TextChannel
                 "VoiceChannel" -> VoiceChannel
+                "ForumChannel" -> ForumChannel
+                "Thread" -> Thread
                 else -> throw IllegalArgumentException("ChannelType could not parse: $value")
             }
 

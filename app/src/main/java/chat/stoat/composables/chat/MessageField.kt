@@ -174,6 +174,7 @@ fun MessageField(
         ChannelType.TextChannel -> R.string.message_field_placeholder_text
         ChannelType.VoiceChannel -> R.string.message_field_placeholder_voice
         ChannelType.SavedMessages -> R.string.message_field_placeholder_notes
+        ChannelType.ForumChannel, ChannelType.Thread -> R.string.message_field_placeholder_thread
     }
 
     val sendButtonVisible =

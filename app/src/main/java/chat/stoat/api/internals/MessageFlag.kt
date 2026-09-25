@@ -29,7 +29,14 @@ enum class MessageFlag(val value: Int) {
      *
      * > **Cannot be set on send**
      */
-    MentionsOnline(1 shl 3)
+    MentionsOnline(1 shl 3),
+
+    /**
+     * A thread was started from this message. The thread has the same id as the message.
+     *
+     * > **Cannot be set on send**
+     */
+    HasThread(1 shl 4)
 }
 
 operator fun Int.plus(other: MessageFlag): Int {

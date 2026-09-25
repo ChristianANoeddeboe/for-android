@@ -159,9 +159,10 @@ class ChannelScreenViewModel(
         clearAllTypingUsers()
         requestSequence++
         this.channelId = id
-        this.items = mutableStateListOf(ChannelScreenItem.Loading)
+        this.items.clear()
+        this.items.add(ChannelScreenItem.Loading)
         this.activePane = ChannelScreenActivePane.None
-        this.typingUsers = mutableStateListOf()
+        this.typingUsers.clear()
         this.didInitialChannelFetch = false
         this.canLoadOlder = false
         this.canLoadNewer = false
@@ -191,8 +192,8 @@ class ChannelScreenViewModel(
         viewModelScope.launch {
             putDraftContent(kvStorage.get("draftContent/$id") ?: "", true)
         }
-        this.draftAttachments = mutableStateListOf()
-        this.draftReplyTo = mutableStateListOf()
+        this.draftAttachments.clear()
+        this.draftReplyTo.clear()
         this.attachmentUploadProgress = 0f
 
         viewModelScope.launch {
