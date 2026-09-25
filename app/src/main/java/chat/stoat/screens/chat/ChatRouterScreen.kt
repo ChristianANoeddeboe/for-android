@@ -60,9 +60,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.app.NotificationManagerCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -71,6 +69,7 @@ import chat.stoat.R
 import chat.stoat.api.StoatAPI
 import chat.stoat.api.internals.DirectMessages
 import chat.stoat.api.realtime.DisconnectionState
+import chat.stoat.api.realtime.RealtimeLifecycle
 import chat.stoat.api.realtime.RealtimeSocket
 import chat.stoat.api.routes.microservices.gazette.getLatestChangelog
 import chat.stoat.api.routes.push.subscribePush
@@ -418,13 +417,6 @@ fun ChatRouterScreen(
             }
 
             else -> null
-        }
-    }
-
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (RealtimeSocket.disconnectionState == DisconnectionState.Disconnected) {
-            RealtimeSocket.updateDisconnectionState(DisconnectionState.Reconnecting)
-            scope.launch { StoatAPI.connectWS() }
         }
     }
 
@@ -901,10 +893,7 @@ fun ChatRouterScreen(
         ) {
             DisconnectedNotice(
                 state = RealtimeSocket.disconnectionState,
-                onReconnect = {
-                    RealtimeSocket.updateDisconnectionState(DisconnectionState.Reconnecting)
-                    scope.launch { StoatAPI.connectWS() }
-                }
+                onReconnect = { RealtimeLifecycle.reconnect() }
             )
         }
 

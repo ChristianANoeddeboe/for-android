@@ -53,6 +53,7 @@ import chat.stoat.core.model.schemas.Role
 import chat.stoat.core.model.util.ChannelVoiceState
 import chat.stoat.persistence.Database
 import chat.stoat.persistence.SqlStorage
+import io.ktor.client.plugins.retry
 import io.ktor.client.plugins.websocket.ws
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
@@ -102,7 +103,9 @@ object RealtimeSocket {
 
         var activeSocket: WebSocketSession? = null
         try {
-            StoatHttp.ws(STOAT_WEBSOCKET) {
+            // The reconnect loop in StoatAPI.connectWS owns retries. Letting HttpRequestRetry
+            // re-run the request would reopen a socket we closed on purpose.
+            StoatHttp.ws(STOAT_WEBSOCKET, request = { retry { noRetry() } }) {
                 activeSocket = this
                 socket = this
 
