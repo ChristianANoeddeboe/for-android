@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,9 +24,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -78,6 +83,8 @@ import chat.stoat.callbacks.Action
 import chat.stoat.callbacks.ActionChannel
 import chat.stoat.composables.generic.RemoteImage
 import chat.stoat.core.model.schemas.Channel
+import chat.stoat.core.model.schemas.AutumnResource
+import chat.stoat.core.model.schemas.ForumLayout
 import chat.stoat.core.model.schemas.ForumSortOrder
 import chat.stoat.core.model.schemas.ForumTag
 import chat.stoat.core.model.schemas.User
@@ -112,6 +119,9 @@ fun ForumScreen(channelId: String, useDrawer: Boolean, onToggleDrawer: () -> Uni
     val selectedTags = remember(channelId) { mutableStateListOf<String>() }
     var sort by remember(channelId) {
         mutableStateOf(channel.defaultSortOrder ?: ForumSortOrder.LatestActivity)
+    }
+    var layout by remember(channelId) {
+        mutableStateOf(channel.defaultLayout ?: ForumLayout.List)
     }
     var showSortMenu by remember { mutableStateOf(false) }
     var showGuidelines by remember(channelId) { mutableStateOf(false) }
@@ -221,6 +231,19 @@ fun ForumScreen(channelId: String, useDrawer: Boolean, onToggleDrawer: () -> Uni
                         }
                     },
                     actions = {
+                        val gallery = layout == ForumLayout.Gallery
+                        IconButton(onClick = {
+                            layout = if (gallery) ForumLayout.List else ForumLayout.Gallery
+                        }) {
+                            Icon(
+                                painter = painterResource(
+                                    if (gallery) R.drawable.ic_list_24dp else R.drawable.ic_grid_view_24dp
+                                ),
+                                contentDescription = stringResource(
+                                    if (gallery) R.string.forum_layout_list else R.string.forum_layout_gallery
+                                )
+                            )
+                        }
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_sort_24dp),
@@ -362,9 +385,7 @@ fun ForumScreen(channelId: String, useDrawer: Boolean, onToggleDrawer: () -> Uni
                 }
             }
 
-            items(activePosts, key = { "active-${it.id}" }) { post ->
-                ForumPostCard(post = post, forum = channel)
-            }
+            forumPosts(activePosts, channel, layout, "active")
 
             if (hasMoreActive) {
                 item(key = "more-active") {
@@ -392,9 +413,7 @@ fun ForumScreen(channelId: String, useDrawer: Boolean, onToggleDrawer: () -> Uni
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                items(closedPosts, key = { "closed-${it.id}" }) { post ->
-                    ForumPostCard(post = post, forum = channel)
-                }
+                forumPosts(closedPosts, channel, layout, "closed")
                 if (hasMoreClosed) {
                     item(key = "more-closed") {
                         TextButton(
@@ -417,6 +436,49 @@ fun ForumScreen(channelId: String, useDrawer: Boolean, onToggleDrawer: () -> Uni
         )
     }
 }
+
+/**
+ * Posts as cards, or as a two column grid of tiles in the gallery layout
+ */
+private fun LazyListScope.forumPosts(
+    posts: List<Channel>,
+    forum: Channel,
+    layout: ForumLayout,
+    keyPrefix: String
+) {
+    if (layout == ForumLayout.Gallery) {
+        items(posts.chunked(2), key = { "$keyPrefix-${it.first().id}" }) { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.height(IntrinsicSize.Max)
+            ) {
+                row.forEach { post ->
+                    ForumPostCard(
+                        post = post,
+                        forum = forum,
+                        gallery = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    } else {
+        items(posts, key = { "$keyPrefix-${it.id}" }) { post ->
+            ForumPostCard(post = post, forum = forum)
+        }
+    }
+}
+
+/**
+ * First image attached to the post's first message
+ */
+private fun postImage(post: Channel): AutumnResource? =
+    StoatAPI.messageCache[post.id]?.attachments?.firstOrNull { it.metadata?.type == "Image" }
+
+private fun AutumnResource.url() = "$STOAT_FILES/attachments/$id/$filename"
 
 /**
  * Tag name with its emoji
@@ -444,12 +506,18 @@ fun ForumTagLabel(tag: ForumTag) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ForumPostCard(post: Channel, forum: Channel) {
+fun ForumPostCard(
+    post: Channel,
+    forum: Channel,
+    gallery: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val scope = rememberCoroutineScope()
     val starter = StoatAPI.messageCache[post.id]
     val author = StoatAPI.userCache[post.owner ?: starter?.author]
     val tags = forum.availableTags?.filter { post.appliedTags?.contains(it.id) == true }
         ?: emptyList()
+    val image = postImage(post)
     val lastActivity = remember(post.lastMessageID, post.id) {
         runCatching { ULID.asTimestamp(post.lastMessageID ?: post.id!!) }.getOrNull()
     }
@@ -459,100 +527,126 @@ fun ForumPostCard(post: Channel, forum: Channel) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(
-            Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            if (tags.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    tags.forEach { tag ->
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
-                            ),
-                            shape = CircleShape
-                        ) {
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
-                                ProvideSmallText { ForumTagLabel(tag) }
+        if (gallery && image != null) {
+            RemoteImage(
+                url = image.url(),
+                description = image.filename,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+            )
+        }
+        Row {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (tags.isNotEmpty()) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tags.forEach { tag ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                ),
+                                shape = CircleShape
+                            ) {
+                                Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                                    ProvideSmallText { ForumTagLabel(tag) }
+                                }
                             }
                         }
                     }
                 }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (post.pinned == true) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_keep_24dp),
-                        contentDescription = stringResource(R.string.forum_post_pinned),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                if (post.locked == true) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_lock_24dp),
-                        contentDescription = stringResource(R.string.forum_post_locked),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Text(
-                    text = post.name ?: "",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-            }
-            starter?.content?.takeIf { it.isNotBlank() }?.let { content ->
-                Text(
-                    text = (author?.let { User.resolveDefaultName(it) + ": " } ?: "") + content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chat_24dp),
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
+                    if (post.pinned == true) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_keep_24dp),
+                            contentDescription = stringResource(R.string.forum_post_pinned),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (post.locked == true) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lock_24dp),
+                            contentDescription = stringResource(R.string.forum_post_locked),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     Text(
-                        text = pluralStringResource(
-                            R.plurals.forum_post_messages,
-                            post.messageCount ?: 0,
-                            post.messageCount ?: 0
-                        ),
-                        style = MaterialTheme.typography.labelMedium
+                        text = post.name ?: "",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                 }
-                lastActivity?.let {
+                starter?.content?.takeIf { it.isNotBlank() }?.let { content ->
                     Text(
-                        text = relativeActivityTime(LocalContext.current, it),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = (author?.let { User.resolveDefaultName(it) + ": " } ?: "") + content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (gallery && image == null) 6 else 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (post.archived == true) {
-                    Text(
-                        text = stringResource(R.string.forum_post_closed),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                val stats: @Composable () -> Unit = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chat_24dp),
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.forum_post_messages,
+                                post.messageCount ?: 0,
+                                post.messageCount ?: 0
+                            ),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                    lastActivity?.let {
+                        Text(
+                            text = relativeActivityTime(LocalContext.current, it),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (post.archived == true) {
+                        Text(
+                            text = stringResource(R.string.forum_post_closed),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                // FlowRow under-reports its intrinsic height, which clips gallery rows
+                if (gallery) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { stats() }
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { stats() }
+                }
+            }
+            if (!gallery && image != null) {
+                RemoteImage(
+                    url = image.url(),
+                    description = image.filename,
+                    modifier = Modifier
+                        .padding(top = 12.dp, end = 12.dp, bottom = 12.dp)
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
             }
         }
     }
