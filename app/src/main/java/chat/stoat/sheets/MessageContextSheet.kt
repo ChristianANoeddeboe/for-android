@@ -44,6 +44,9 @@ import chat.stoat.api.routes.channel.react
 import chat.stoat.callbacks.UiCallbacks
 import chat.stoat.composables.chat.Message
 import chat.stoat.composables.generic.SheetButton
+import chat.stoat.api.internals.MessageFlag
+import chat.stoat.core.model.schemas.ChannelType
+import chat.stoat.screens.chat.views.thread.selfPermissions
 import chat.stoat.core.model.data.STOAT_WEB_APP
 import chat.stoat.internals.Platform
 import kotlinx.coroutines.launch
@@ -53,7 +56,8 @@ import kotlinx.coroutines.launch
 fun MessageContextSheet(
     messageId: String,
     onHideSheet: suspend () -> Unit,
-    onReportMessage: () -> Unit
+    onReportMessage: () -> Unit,
+    onCreateThread: (() -> Unit)? = null
 ) {
     val message = StoatAPI.messageCache[messageId]
     if (message == null) {
@@ -360,6 +364,33 @@ fun MessageContextSheet(
                 showReactSheet = true
             }
         )
+
+        val messageChannel = message.channel?.let { StoatAPI.channelCache[it] }
+        if (onCreateThread != null &&
+            messageChannel?.channelType == ChannelType.TextChannel &&
+            messageChannel.server != null &&
+            message.system == null &&
+            !(message.flags has MessageFlag.HasThread) &&
+            selfPermissions(messageChannel) has PermissionBit.CreatePublicThreads
+        ) {
+            SheetButton(
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_chat_24dp),
+                        contentDescription = null
+                    )
+                },
+                headlineContent = {
+                    Text(text = stringResource(id = R.string.thread_create))
+                },
+                onClick = {
+                    onCreateThread()
+                    coroutineScope.launch {
+                        onHideSheet()
+                    }
+                }
+            )
+        }
 
         if (message.author == StoatAPI.selfId) {
             SheetButton(

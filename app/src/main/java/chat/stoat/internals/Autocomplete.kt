@@ -112,7 +112,8 @@ object Autocomplete {
                 }
             }
 
-            ChannelType.TextChannel, ChannelType.VoiceChannel -> {
+            ChannelType.TextChannel, ChannelType.VoiceChannel,
+            ChannelType.ForumChannel, ChannelType.Thread -> {
                 if (serverId == null) return emptyList()
 
                 val roles =

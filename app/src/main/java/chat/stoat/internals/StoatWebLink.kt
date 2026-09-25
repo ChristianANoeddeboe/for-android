@@ -39,6 +39,25 @@ fun Uri.toStoatWebLinkOrNull(): StoatWebLink? {
                 messageId = segments[2],
             )
 
+        // Threads and forum posts: /server/:server/channel/:parent/thread/:thread[/:message]
+        segments.size == 6 &&
+                segments[0] == "server" &&
+                segments[2] == "channel" &&
+                segments[4] == "thread" &&
+                segments[5].isUlid() ->
+            StoatWebLink.Channel(channelId = segments[5])
+
+        segments.size == 7 &&
+                segments[0] == "server" &&
+                segments[2] == "channel" &&
+                segments[4] == "thread" &&
+                segments[5].isUlid() &&
+                segments[6].isUlid() ->
+            StoatWebLink.Message(
+                channelId = segments[5],
+                messageId = segments[6],
+            )
+
         segments.size == 2 &&
                 segments[0] == "server" &&
                 segments[1].isUlid() ->

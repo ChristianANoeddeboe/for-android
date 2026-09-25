@@ -130,6 +130,12 @@ import chat.stoat.activities.StoatTweenDp
 import chat.stoat.activities.StoatTweenFloat
 import chat.stoat.activities.StoatTweenInt
 import chat.stoat.api.StoatAPI
+import chat.stoat.api.routes.channel.joinThread
+import chat.stoat.screens.chat.views.thread.CreateThreadDialog
+import chat.stoat.screens.chat.views.thread.ThreadOptionsSheet
+import chat.stoat.screens.chat.views.thread.ThreadsListSheet
+import chat.stoat.screens.chat.views.thread.isForumPost
+import chat.stoat.screens.chat.views.thread.showThreadError
 import chat.stoat.api.internals.ChannelUtils
 import chat.stoat.api.internals.PermissionBit
 import chat.stoat.api.internals.has
@@ -607,6 +613,55 @@ fun ChannelScreen(
         }
     }
 
+    var threadOptionsSheetShown by remember { mutableStateOf(false) }
+    if (threadOptionsSheetShown) {
+        val threadOptionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        ModalBottomSheet(
+            sheetState = threadOptionsSheetState,
+            onDismissRequest = {
+                threadOptionsSheetShown = false
+            }
+        ) {
+            ThreadOptionsSheet(
+                threadId = channelId,
+                onHideSheet = {
+                    threadOptionsSheetState.hide()
+                    threadOptionsSheetShown = false
+                }
+            )
+        }
+    }
+
+    var threadsListSheetShown by remember { mutableStateOf(false) }
+    if (threadsListSheetShown) {
+        val threadsListSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        ModalBottomSheet(
+            sheetState = threadsListSheetState,
+            onDismissRequest = {
+                threadsListSheetShown = false
+            }
+        ) {
+            ThreadsListSheet(
+                channelId = channelId,
+                onHideSheet = {
+                    threadsListSheetState.hide()
+                    threadsListSheetShown = false
+                }
+            )
+        }
+    }
+
+    var createThreadTarget by remember { mutableStateOf<String?>(null) }
+    createThreadTarget?.let { target ->
+        CreateThreadDialog(
+            channelId = channelId,
+            messageId = target,
+            onDismiss = { createThreadTarget = null }
+        )
+    }
+
     var messageContextSheetShown by remember { mutableStateOf(false) }
     var messageContextSheetTarget by remember { mutableStateOf("") }
     if (messageContextSheetShown) {
@@ -620,6 +675,9 @@ fun ChannelScreen(
         ) {
             MessageContextSheet(
                 messageId = messageContextSheetTarget,
+                onCreateThread = {
+                    createThreadTarget = messageContextSheetTarget
+                },
                 onHideSheet = {
                     messageContextSheetState.hide()
                     messageContextSheetShown = false
@@ -672,7 +730,11 @@ fun ChannelScreen(
                 }
                 TopAppBar(
                     modifier = Modifier.clickable {
-                        channelInfoSheetShown = true
+                        if (viewModel.channel?.isThread == true) {
+                            threadOptionsSheetShown = true
+                        } else {
+                            channelInfoSheetShown = true
+                        }
                     },
                     title = {
                         Row(
@@ -721,6 +783,30 @@ fun ChannelScreen(
                                     )
                                 ) {
                                     when (it.channelType) {
+                                        ChannelType.Thread -> Column {
+                                            StoatAPI.channelCache[it.parent]?.name?.let { parentName ->
+                                                Text(
+                                                    parentName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.clickable {
+                                                        scope.launch {
+                                                            ActionChannel.send(
+                                                                Action.SwitchChannel(it.parent!!)
+                                                            )
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                            Text(
+                                                it.name ?: stringResource(R.string.unknown),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
                                         ChannelType.TextChannel, ChannelType.VoiceChannel, ChannelType.Group -> Text(
                                             it.name ?: stringResource(R.string.unknown),
                                             maxLines = 1,
@@ -808,6 +894,32 @@ fun ChannelScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_call_24dp__fill),
                                     contentDescription = stringResource(id = R.string.voice_start_call)
+                                )
+                            }
+                        }
+                        val current = viewModel.channel
+                        if (current?.isThread == true && channelId !in StoatAPI.threadMembers) {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        joinThread(channelId)
+                                    } catch (e: Exception) {
+                                        showThreadError(context, e)
+                                    }
+                                }
+                            }) {
+                                Text(
+                                    stringResource(
+                                        if (current.isForumPost) R.string.thread_follow else R.string.thread_join
+                                    )
+                                )
+                            }
+                        }
+                        if (current?.channelType == ChannelType.TextChannel && current.server != null) {
+                            IconButton(onClick = { threadsListSheetShown = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_forum_24dp),
+                                    contentDescription = stringResource(R.string.threads)
                                 )
                             }
                         }

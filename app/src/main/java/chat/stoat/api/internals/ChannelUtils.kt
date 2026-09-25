@@ -11,6 +11,12 @@ sealed class CategorisedChannelList {
 
     data class Category(val category: chat.stoat.core.model.schemas.Category) :
         CategorisedChannelList()
+
+    /**
+     * A thread the user has joined, listed under its parent channel
+     */
+    data class Thread(val thread: chat.stoat.core.model.schemas.Channel) :
+        CategorisedChannelList()
 }
 
 object ChannelUtils {
@@ -44,25 +50,37 @@ object ChannelUtils {
                     ) == true
                 } ?: true
             }
-                ?.mapNotNull {
-                    StoatAPI.channelCache[it]?.let { it1 ->
-                        CategorisedChannelList.Channel(it1)
-                    }
-                } ?: emptyList()
-        output.addAll(uncategorised)
+                ?.mapNotNull { StoatAPI.channelCache[it] } ?: emptyList()
+        uncategorised.forEach { addWithThreads(output, it) }
 
         val categories =
             server.categories?.map { CategorisedChannelList.Category(it) } ?: emptyList()
         categories.forEach {
             output.add(it)
-            val channels = it.category.channels?.mapNotNull { c ->
-                StoatAPI.channelCache[c]?.let { it1 ->
-                    CategorisedChannelList.Channel(it1)
-                }
-            } ?: emptyList()
-            output.addAll(channels)
+            it.category.channels
+                ?.mapNotNull { c -> StoatAPI.channelCache[c] }
+                ?.forEach { c -> addWithThreads(output, c) }
         }
 
         return output
+    }
+
+    /**
+     * Joined, open threads of a channel, most recently active first
+     */
+    fun joinedThreads(channelId: String): List<Channel> {
+        return StoatAPI.channelCache.values
+            .filter {
+                it.isThread && it.parent == channelId && it.archived != true &&
+                    it.id in StoatAPI.threadMembers
+            }
+            .sortedByDescending { it.lastMessageID ?: it.id }
+    }
+
+    private fun addWithThreads(output: MutableList<CategorisedChannelList>, channel: Channel) {
+        output.add(CategorisedChannelList.Channel(channel))
+        channel.id?.let { id ->
+            joinedThreads(id).forEach { output.add(CategorisedChannelList.Thread(it)) }
+        }
     }
 }

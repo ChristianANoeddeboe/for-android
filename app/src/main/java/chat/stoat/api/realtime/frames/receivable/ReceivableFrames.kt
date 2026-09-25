@@ -11,6 +11,7 @@ import chat.stoat.core.model.util.PartialUserVoiceState
 import chat.stoat.core.model.schemas.Role
 import chat.stoat.core.model.schemas.Server
 import chat.stoat.core.model.schemas.ServerUserChoice
+import chat.stoat.core.model.schemas.ThreadMember
 import chat.stoat.core.model.schemas.User
 import chat.stoat.core.model.util.UserVoiceState
 import kotlinx.serialization.SerialName
@@ -48,6 +49,7 @@ data class ReadyFrame(
     val channels: List<Channel>,
     val emojis: List<Emoji>,
     @SerialName("voice_states") val voiceStates: List<ChannelVoiceState> = listOf(),
+    @SerialName("thread_members") val threadMembers: List<ThreadMember>? = null,
 )
 
 typealias MessageFrame = Message
@@ -115,6 +117,23 @@ data class ChannelUpdateFrame(
     val id: String,
     val data: Channel,
     val clear: List<String>? = null // "Icon" or "Description"
+)
+
+@Serializable
+data class ThreadMemberUpdateFrame(
+    val type: String = "ThreadMemberUpdate",
+    val id: String,
+    val member: ThreadMember? = null
+)
+
+@Serializable
+data class ThreadMembersUpdateFrame(
+    val type: String = "ThreadMembersUpdate",
+    val id: String,
+    val server: String,
+    @SerialName("member_count") val memberCount: Int,
+    val added: List<ThreadMember> = emptyList(),
+    val removed: List<String> = emptyList()
 )
 
 @Serializable

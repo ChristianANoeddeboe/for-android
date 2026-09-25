@@ -77,6 +77,22 @@ private fun ChannelIcon(
                 modifier = modifier
             )
         }
+
+        ChannelType.ForumChannel -> {
+            Icon(
+                painter = painterResource(R.drawable.ic_forum_24dp),
+                contentDescription = stringResource(R.string.channel_forum),
+                modifier = modifier
+            )
+        }
+
+        ChannelType.Thread -> {
+            Icon(
+                painter = painterResource(R.drawable.ic_chat_24dp),
+                contentDescription = stringResource(R.string.channel_thread),
+                modifier = modifier
+            )
+        }
     }
 }
 
@@ -87,7 +103,9 @@ class ChannelTypeProvider : PreviewParameterProvider<ChannelType> {
             ChannelType.VoiceChannel,
             ChannelType.SavedMessages,
             ChannelType.DirectMessage,
-            ChannelType.Group
+            ChannelType.Group,
+            ChannelType.ForumChannel,
+            ChannelType.Thread
         )
 
     override val count: Int

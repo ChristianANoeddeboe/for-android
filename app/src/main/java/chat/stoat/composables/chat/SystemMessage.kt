@@ -30,7 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import chat.stoat.R
+import androidx.compose.runtime.rememberCoroutineScope
 import chat.stoat.api.StoatAPI
+import chat.stoat.callbacks.Action
+import chat.stoat.callbacks.ActionChannel
+import kotlinx.coroutines.launch
 import chat.stoat.api.internals.ULID
 import chat.stoat.composables.markdown.prose.ChatMarkdown
 import chat.stoat.core.model.schemas.Message
@@ -50,6 +54,7 @@ enum class SystemMessageType(val type: String) {
     MESSAGE_PINNED("message_pinned"),
     MESSAGE_UNPINNED("message_unpinned"),
     CALL_STARTED("call_started"),
+    THREAD_CREATED("thread_created"),
     TEXT("text")
 }
 
@@ -73,6 +78,8 @@ fun SystemMessage(
         return
     }
 
+    val scope = rememberCoroutineScope()
+
     CompositionLocalProvider(
         LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f),
         LocalTextStyle provides LocalTextStyle.current.copy(
@@ -82,7 +89,19 @@ fun SystemMessage(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .then(
+                    when {
+                        onClick != null -> Modifier.clickable(onClick = onClick)
+                        // The system message shares its id with the thread
+                        systemMessageType == SystemMessageType.THREAD_CREATED -> Modifier.clickable {
+                            scope.launch {
+                                ActionChannel.send(Action.SwitchChannel(message.id!!))
+                            }
+                        }
+
+                        else -> Modifier
+                    }
+                )
                 .padding(horizontal = 10.dp, vertical = 4.dp)
                 .fillMaxWidth()
         ) {
@@ -233,6 +252,17 @@ fun SystemMessage(
                                 message.system!!.by.mention()
                             )
                         },
+                        serverId = serverId
+                    )
+                }
+
+                SystemMessageType.THREAD_CREATED -> {
+                    ChatMarkdown(
+                        stringResource(
+                            R.string.thread_created_by,
+                            message.system!!.by.mention(),
+                            "**${message.system!!.name ?: ""}**"
+                        ),
                         serverId = serverId
                     )
                 }
@@ -475,6 +505,15 @@ fun SystemMessageIcon(type: SystemMessageType, modifier: Modifier = Modifier, si
             )
         }
 
+        SystemMessageType.THREAD_CREATED -> {
+            Icon(
+                painter = painterResource(R.drawable.ic_chat_24dp),
+                contentDescription = stringResource(R.string.channel_thread),
+                tint = LocalContentColor.current,
+                modifier = modifier.size(size)
+            )
+        }
+
         SystemMessageType.TEXT -> {
             Icon(
                 painter = painterResource(R.drawable.ic_info_24dp),
@@ -503,6 +542,7 @@ private fun shapeForType(type: SystemMessageType): Shape {
         SystemMessageType.MESSAGE_PINNED -> MaterialShapes.Clover4Leaf
         SystemMessageType.MESSAGE_UNPINNED -> MaterialShapes.Clover8Leaf
         SystemMessageType.CALL_STARTED -> MaterialShapes.Fan
+        SystemMessageType.THREAD_CREATED -> MaterialShapes.Arch
         SystemMessageType.TEXT -> MaterialShapes.Square
     }.toShape()
 }

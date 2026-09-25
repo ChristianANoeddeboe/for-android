@@ -50,8 +50,14 @@ enum class PermissionBit(val value: Long) {
     MentionRoles(1L shl 38),
     BypassSlowmode(1L shl 39),
 
+    // * Thread permissions
+    CreatePublicThreads(1L shl 48),
+    CreatePrivateThreads(1L shl 49),
+    SendMessagesInThreads(1L shl 50),
+    ManageThreads(1L shl 51),
+
     // * Misc. permissions
-    // % Bits 40 to 52: free area
+    // % Bits 40 to 47: free area
     // % Bits 53 to 64: do not use
 
     // * Grant all permissions
@@ -94,7 +100,10 @@ object BitDefaults {
                 PermissionBit.UploadFiles +
                 PermissionBit.Connect +
                 PermissionBit.Speak +
-                PermissionBit.Listen
+                PermissionBit.Listen +
+                PermissionBit.CreatePublicThreads +
+                PermissionBit.CreatePrivateThreads +
+                PermissionBit.SendMessagesInThreads
 
     val SavedMessages =
         PermissionBit.GrantAllSafe.value
