@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StrictMode
 import chat.stoat.api.instance.InstanceManager
+import chat.stoat.api.realtime.RealtimeLifecycle
 import chat.stoat.di.appModule
 import chat.stoat.di.viewModelModule
 import coil3.ImageLoader
@@ -38,6 +39,8 @@ class StoatApplication : Application(), SingletonImageLoader.Factory {
             androidLogger()
             modules(appModule, viewModelModule)
         }
+
+        RealtimeLifecycle.install()
 
         if (BuildConfig.DEBUG) {
             // Enable strict mode primarily to catch non-API usage, although we detect all

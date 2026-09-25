@@ -36,6 +36,8 @@ import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.header
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.close
 import io.sentry.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -50,6 +53,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -60,6 +64,7 @@ import logcat.asLog
 import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.SocketException
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
 import chat.stoat.core.model.schemas.Channel as ChannelSchema
 
@@ -83,6 +88,8 @@ val StoatJson = Json {
 val StoatCbor = Cbor {
     ignoreUnknownKeys = true
 }
+
+private const val WS_TRANSPORT_PING_INTERVAL_SECONDS = 20L
 
 val StoatHttp = HttpClient(OkHttp) {
     install(DefaultRequest)
@@ -136,6 +143,13 @@ val StoatHttp = HttpClient(OkHttp) {
             chain.proceed(request)
         }
         addInterceptor(chuckerInterceptor)
+
+        config {
+            // WebSocket-level pings let OkHttp notice a connection that died silently (network
+            // change, NAT timeout) and fail it, so the reconnect loop can take over. The server
+            // keeps counting us as online, and skips push notifications, until the socket closes.
+            pingInterval(WS_TRANSPORT_PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
+        }
     }
 
     defaultRequest {
@@ -151,6 +165,7 @@ object StoatAPI {
     private val INITIAL_RECONNECT_DELAY = 1.seconds
     private val MAX_RECONNECT_DELAY = 30.seconds
     private val PING_INTERVAL = 30.seconds // Same interval as the web clients (/revolt.js)
+    private val WS_CLOSE_TIMEOUT = 2.seconds
 
     val userCache = mutableStateMapOf<String, User>()
     val serverCache = mutableStateMapOf<String, Server>()
@@ -181,6 +196,9 @@ object StoatAPI {
     private var socketCoroutine: Job? = null
     private var pingCoroutine: Job? = null
 
+    @Volatile
+    private var socketWanted = false
+
     private var openForLocalHydration = true
 
     fun setSessionHeader(token: String) {
@@ -194,18 +212,19 @@ object StoatAPI {
     suspend fun loginAs(token: String) {
         setSessionHeader(token)
         fetchSelf()
-        startSocketOps()
+        connectWS()
         unreads.sync()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun connectWS() {
         socketCoroutine?.cancelAndJoin()
+        socketWanted = true
         RealtimeSocket.updateDisconnectionState(DisconnectionState.Reconnecting)
         val token = sessionToken
         socketCoroutine = CoroutineScope(Dispatchers.IO).launch {
             var reconnectDelay = INITIAL_RECONNECT_DELAY
-            while (isActive && sessionToken == token) {
+            while (isActive && socketWanted && sessionToken == token) {
                 try {
                     withContext(realtimeContext) {
                         RealtimeSocket.connect(token)
@@ -219,7 +238,7 @@ object StoatAPI {
                     logcat(LogPriority.ERROR) { "WebSocket error:\n${e.asLog()}" }
                 }
 
-                if (!isActive || sessionToken != token) break
+                if (!isActive || !socketWanted || sessionToken != token) break
 
                 try {
                     RealtimeSocket.updateDisconnectionState(DisconnectionState.Reconnecting)
@@ -234,11 +253,32 @@ object StoatAPI {
                 }
             }
         }
+        startPing()
     }
 
-    private suspend fun startSocketOps() {
-        connectWS()
+    /**
+     * Closes the websocket and stops reconnecting until [connectWS] is called again. While the
+     * socket is open the server treats us as online and does not send push notifications, so
+     * this is called when the app goes to the background.
+     */
+    suspend fun disconnectWS() {
+        // Stop the reconnect loop from opening a new socket once this one closes
+        socketWanted = false
+        pingCoroutine?.cancel()
+        pingCoroutine = null
+        withContext(NonCancellable) {
+            withTimeoutOrNull(WS_CLOSE_TIMEOUT) {
+                RealtimeSocket.socket?.close(
+                    CloseReason(CloseReason.Codes.GOING_AWAY, "App went to the background.")
+                )
+            }
+            socketCoroutine?.cancelAndJoin()
+        }
+        socketCoroutine = null
+        RealtimeSocket.updateDisconnectionState(DisconnectionState.Disconnected)
+    }
 
+    private fun startPing() {
         // Send a ping every roughly PING_INTERVAL else the socket dies
         pingCoroutine?.cancel()
         pingCoroutine = CoroutineScope(Dispatchers.IO).launch {
@@ -287,6 +327,7 @@ object StoatAPI {
         members.clear()
         unreads.clear()
 
+        socketWanted = false
         socketCoroutine?.cancel()
         pingCoroutine?.cancel()
 
