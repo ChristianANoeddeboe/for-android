@@ -22,6 +22,22 @@ import chat.stoat.api.routes.channel.removeMember
 import chat.stoat.composables.generic.SheetButton
 import chat.stoat.internals.Platform
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import chat.stoat.api.internals.PermissionBit
+import chat.stoat.api.internals.has
+import chat.stoat.callbacks.Action
+import chat.stoat.callbacks.ActionChannel
+import chat.stoat.screens.settings.server.BanMemberDialog
+import chat.stoat.screens.settings.server.KickMemberDialog
+import chat.stoat.screens.settings.server.TimeoutMemberDialog
+import chat.stoat.screens.settings.server.canModerate
+import chat.stoat.screens.settings.server.isTimedOut
+import chat.stoat.screens.settings.server.selfServerPermissions
 
 @Composable
 fun ColumnScope.GroupDMMemberContextSheet(
@@ -123,7 +139,80 @@ fun ColumnScope.ServerMemberContextSheet(
 
     if (server == null || channel == null) return
 
-    // TODO add something useful (moderation actions)
+    val scope = rememberCoroutineScope()
+    var dialog by remember { mutableStateOf<String?>(null) }
+    val permissions = selfServerPermissions(serverId)
+    val outranks = canModerate(serverId, userId)
+    val onDone: () -> Unit = {
+        dialog = null
+        scope.launch {
+            onRequestUpdateMembers()
+            dismissSheet()
+        }
+    }
+
+    when (dialog) {
+        "kick" -> KickMemberDialog(serverId, userId, { dialog = null }, onDone)
+        "ban" -> BanMemberDialog(serverId, userId, { dialog = null }, onDone)
+        "timeout" -> TimeoutMemberDialog(serverId, userId, { dialog = null }, onDone)
+    }
+
+    val canManageMember = (outranks && listOf(
+        PermissionBit.AssignRoles, PermissionBit.ManageNicknames, PermissionBit.RemoveAvatars,
+        PermissionBit.KickMembers, PermissionBit.BanMembers, PermissionBit.TimeoutMembers
+    ).any { permissions has it }) || (userId == StoatAPI.selfId && permissions has PermissionBit.AssignRoles)
+
+    if (canManageMember) {
+        SheetButton(
+            headlineContent = { Text(stringResource(R.string.manage_member_manage)) },
+            leadingContent = {
+                Icon(painter = painterResource(R.drawable.ic_settings_24dp), contentDescription = null)
+            },
+            modifier = Modifier.testTag("member_sheet_manage"),
+            onClick = {
+                scope.launch {
+                    dismissSheet()
+                    ActionChannel.send(Action.TopNavigate("settings/server/$serverId/members/$userId"))
+                }
+            }
+        )
+    }
+
+    if (outranks && permissions has PermissionBit.TimeoutMembers && !isTimedOut(StoatAPI.members.getMember(serverId, userId))) {
+        SheetButton(
+            headlineContent = { Text(stringResource(R.string.manage_timeout)) },
+            leadingContent = {
+                Icon(painter = painterResource(R.drawable.ic_timer_24dp), contentDescription = null)
+            },
+            modifier = Modifier.testTag("member_sheet_timeout"),
+            onClick = { dialog = "timeout" }
+        )
+    }
+
+    if (outranks && permissions has PermissionBit.KickMembers) {
+        SheetButton(
+            headlineContent = { Text(stringResource(R.string.manage_kick)) },
+            leadingContent = {
+                Icon(painter = painterResource(R.drawable.ic_logout_24dp), contentDescription = null)
+            },
+            dangerous = true,
+            modifier = Modifier.testTag("member_sheet_kick"),
+            onClick = { dialog = "kick" }
+        )
+    }
+
+    if (outranks && permissions has PermissionBit.BanMembers) {
+        SheetButton(
+            headlineContent = { Text(stringResource(R.string.manage_ban)) },
+            leadingContent = {
+                Icon(painter = painterResource(R.drawable.ic_gavel_24dp), contentDescription = null)
+            },
+            dangerous = true,
+            modifier = Modifier.testTag("member_sheet_ban"),
+            onClick = { dialog = "ban" }
+        )
+    }
+
 
     // TODO replace with something useful (currently so that your sheet is not empty if you don't have permissions)
     SheetButton(
