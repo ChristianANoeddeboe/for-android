@@ -26,6 +26,7 @@ import chat.stoat.api.realtime.frames.receivable.ServerCreateFrame
 import chat.stoat.api.realtime.frames.receivable.ServerDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.ServerMemberJoinFrame
 import chat.stoat.api.realtime.frames.receivable.ServerMemberLeaveFrame
+import chat.stoat.api.realtime.frames.receivable.EmojiDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.ServerMemberUpdateFrame
 import chat.stoat.api.realtime.frames.receivable.ServerRoleDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.ServerRoleUpdateFrame
@@ -51,6 +52,7 @@ import chat.stoat.c2dm.ChannelRegistrator
 import chat.stoat.core.model.data.STOAT_WEBSOCKET
 import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
+import chat.stoat.core.model.schemas.Emoji
 import chat.stoat.core.model.schemas.Role
 import chat.stoat.core.model.util.ChannelVoiceState
 import chat.stoat.persistence.Database
@@ -753,6 +755,8 @@ object RealtimeSocket {
                         "Icon" -> updated = updated.copy(icon = null)
                         "Banner" -> updated = updated.copy(banner = null)
                         "Description" -> updated = updated.copy(description = null)
+                        "Categories" -> updated = updated.copy(categories = emptyList())
+                        "SystemMessages" -> updated = updated.copy(systemMessages = null)
                         else -> Log.e("RealtimeSocket", "Unknown server clear field: $it")
                     }
                 }
@@ -809,6 +813,8 @@ object RealtimeSocket {
                         "Avatar" -> updated = updated.copy(avatar = null)
                         "Nickname" -> updated = updated.copy(nickname = null)
                         "Pronouns" -> updated = updated.copy(pronouns = null)
+                        "Roles" -> updated = updated.copy(roles = emptyList())
+                        "Timeout" -> updated = updated.copy(timeout = null)
                         else -> Log.e("RealtimeSocket", "Unknown server member clear field: $it")
                     }
                 }
@@ -882,7 +888,14 @@ object RealtimeSocket {
                         "RealtimeSocket",
                         "Updating existing role ${serverRoleUpdateFrame.roleId} in server ${serverRoleUpdateFrame.id}."
                     )
-                    val updatedRole = existingRole.mergeWithPartial(serverRoleUpdateFrame.data)
+                    var updatedRole = existingRole.mergeWithPartial(serverRoleUpdateFrame.data)
+                    serverRoleUpdateFrame.clear?.forEach {
+                        when (it) {
+                            "Colour" -> updatedRole = updatedRole.copy(colour = null)
+                            "Icon" -> updatedRole = updatedRole.copy(icon = null)
+                            else -> Log.e("RealtimeSocket", "Unknown role clear field: $it")
+                        }
+                    }
                     val newServer = server.copy(
                         roles = server.roles!!.plus(
                             Pair(serverRoleUpdateFrame.roleId, updatedRole)
@@ -914,6 +927,17 @@ object RealtimeSocket {
 
                 StoatAPI.serverCache[serverRoleDeleteFrame.id] =
                     server.copy(roles = newRoles)
+            }
+
+            "EmojiCreate" -> {
+                val emoji = StoatJson.decodeFromString(Emoji.serializer(), rawFrame)
+                emoji.id?.let { StoatAPI.emojiCache[it] = emoji.copy(type = null) }
+            }
+
+            "EmojiDelete" -> {
+                val emojiDeleteFrame =
+                    StoatJson.decodeFromString(EmojiDeleteFrame.serializer(), rawFrame)
+                StoatAPI.emojiCache.remove(emojiDeleteFrame.id)
             }
 
             "VoiceChannelJoin" -> {

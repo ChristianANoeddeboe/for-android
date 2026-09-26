@@ -62,9 +62,13 @@ data class Category(
 
 @Serializable
 data class SystemMessages(
+    @SerialName("user_joined")
     val userJoined: String? = null,
+    @SerialName("user_left")
     val userLeft: String? = null,
+    @SerialName("user_kicked")
     val userKicked: String? = null,
+    @SerialName("user_banned")
     val userBanned: String? = null
 )
 
@@ -83,7 +87,8 @@ data class Role(
             permissions = other.permissions ?: permissions,
             colour = other.colour ?: colour,
             hoist = other.hoist ?: hoist,
-            rank = other.rank ?: rank
+            rank = other.rank ?: rank,
+            icon = other.icon ?: icon
         )
     }
 }
@@ -99,6 +104,7 @@ data class Emoji(
     @SerialName("_id")
     val id: String? = null,
     val parent: EmojiParent? = null,
+    @SerialName("creator_id")
     val creatorID: String? = null,
     val name: String? = null,
     val animated: Boolean? = null,

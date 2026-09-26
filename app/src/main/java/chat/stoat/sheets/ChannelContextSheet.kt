@@ -19,9 +19,16 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import chat.stoat.R
 import chat.stoat.api.StoatAPI
+import chat.stoat.api.internals.PermissionBit
+import chat.stoat.api.internals.has
+import chat.stoat.callbacks.Action
+import chat.stoat.callbacks.ActionChannel
 import chat.stoat.composables.generic.SheetButton
-
+import chat.stoat.core.model.schemas.ChannelType
 import chat.stoat.internals.Platform
+import chat.stoat.internals.extensions.rememberChannelPermissions
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,6 +49,37 @@ fun ChannelContextSheet(channelId: String, onHideSheet: suspend () -> Unit) {
     val context = LocalContext.current
 
     val coroutineScope = rememberCoroutineScope()
+    val permissions by rememberChannelPermissions(channelId)
+
+    if (
+        channel.server != null &&
+        (permissions has PermissionBit.ManageChannel || permissions has PermissionBit.ManageRole ||
+                permissions has PermissionBit.ManagePermissions || permissions has PermissionBit.ManageWebhooks) &&
+        channel.channelType != ChannelType.Thread
+    ) {
+        SheetButton(
+            headlineContent = {
+                Text(
+                    text = stringResource(id = R.string.settings),
+                )
+            },
+            leadingContent = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings_24dp),
+                    contentDescription = null
+                )
+            },
+            onClick = {
+                coroutineScope.launch {
+                    onHideSheet()
+                }
+                coroutineScope.launch {
+                    delay(100)
+                    ActionChannel.send(Action.TopNavigate("settings/channel/$channelId"))
+                }
+            }
+        )
+    }
 
     SheetButton(
         headlineContent = {

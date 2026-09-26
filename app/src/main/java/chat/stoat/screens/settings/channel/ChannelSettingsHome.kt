@@ -42,9 +42,9 @@ import chat.stoat.api.internals.PermissionBit
 import chat.stoat.api.internals.hasPermission
 import chat.stoat.api.routes.channel.leaveDeleteOrCloseChannel
 import chat.stoat.core.model.schemas.ChannelType
-import chat.stoat.api.settings.FeatureFlags
 import chat.stoat.internals.extensions.rememberChannelPermissions
 import chat.stoat.screens.settings.SettingsIcon
+import chat.stoat.screens.settings.server.ManageEntry
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -148,8 +148,8 @@ fun ChannelSettingsHome(navController: NavController, channelId: String) {
                         )
                     }
 
-                    // TODO Implement permissions UI and remove the predicate check
-                    if (permissions.hasPermission(PermissionBit.ManageRole) && FeatureFlags.labsAccessControlGranted) {
+                    val isServerChannel = channel.server != null
+                    if (isServerChannel && permissions.hasPermission(PermissionBit.ManagePermissions)) {
                         ListItem(
                             headlineContent = {
                                 Text(
@@ -169,6 +169,37 @@ fun ChannelSettingsHome(navController: NavController, channelId: String) {
                                 .clickable {
                                     navController.navigate("settings/channel/${channel.id}/permissions")
                                 }
+                        )
+                    }
+
+                    val isTextLike = channel.channelType == ChannelType.TextChannel ||
+                            channel.channelType == ChannelType.ForumChannel
+                    if (isServerChannel && isTextLike && permissions.hasPermission(PermissionBit.ManageChannel)) {
+                        ManageEntry(
+                            title = stringResource(R.string.manage_thread_settings),
+                            icon = R.drawable.ic_forum_24dp,
+                            onClick = { navController.navigate("settings/channel/${channel.id}/threads") },
+                            modifier = Modifier.testTag("channel_settings_view_threads")
+                        )
+                    }
+
+                    if (channel.channelType == ChannelType.ForumChannel && permissions.hasPermission(PermissionBit.ManageChannel)) {
+                        ManageEntry(
+                            title = stringResource(R.string.manage_forum_tags),
+                            icon = R.drawable.ic_tag_24dp,
+                            onClick = { navController.navigate("settings/channel/${channel.id}/tags") },
+                            modifier = Modifier.testTag("channel_settings_view_tags")
+                        )
+                    }
+
+                    if (isServerChannel && channel.channelType == ChannelType.TextChannel &&
+                        permissions.hasPermission(PermissionBit.ManageWebhooks)
+                    ) {
+                        ManageEntry(
+                            title = stringResource(R.string.manage_webhooks),
+                            icon = R.drawable.ic_webhook_24dp,
+                            onClick = { navController.navigate("settings/channel/${channel.id}/webhooks") },
+                            modifier = Modifier.testTag("channel_settings_view_webhooks")
                         )
                     }
 

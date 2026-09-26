@@ -1,8 +1,6 @@
 package chat.stoat.sheets
 
-import android.content.Intent
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,22 +30,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import chat.stoat.R
 import chat.stoat.api.StoatAPI
 import chat.stoat.api.routes.server.leaveOrDeleteServer
 import chat.stoat.composables.generic.SheetButton
 import chat.stoat.composables.markdown.prose.ChatMarkdown
 import chat.stoat.composables.screens.settings.ServerOverview
-import chat.stoat.composables.sheets.SheetSelection
-import chat.stoat.core.model.data.STOAT_WEB_APP
+import chat.stoat.api.internals.PermissionBit
+import chat.stoat.api.internals.Roles
+import chat.stoat.api.internals.has
+import chat.stoat.api.internals.hasPermission
+import chat.stoat.api.routes.server.createChannelInvite
+import chat.stoat.callbacks.Action
+import chat.stoat.callbacks.ActionChannel
+import chat.stoat.core.model.data.STOAT_INVITES
+import chat.stoat.core.model.schemas.ChannelType
+import chat.stoat.screens.settings.server.CreateCategoryDialog
+import chat.stoat.screens.settings.server.CreateChannelDialog
+import chat.stoat.screens.settings.server.copyWithToast
+import chat.stoat.screens.settings.server.selfServerPermissions
+import androidx.compose.ui.platform.testTag
 import chat.stoat.internals.Platform
 import kotlinx.coroutines.launch
 
@@ -76,6 +84,32 @@ fun ServerContextSheet(
 
     var showLeaveConfirmation by remember { mutableStateOf(false) }
     var leaveSilently by remember { mutableStateOf(false) }
+    var showCreateChannel by remember { mutableStateOf(false) }
+    var showCreateCategory by remember { mutableStateOf(false) }
+
+    if (showCreateChannel) {
+        CreateChannelDialog(
+            serverId = serverId,
+            onDismiss = { showCreateChannel = false },
+            onCreated = { channel ->
+                showCreateChannel = false
+                coroutineScope.launch {
+                    onHideSheet()
+                    channel.id?.let { ActionChannel.send(Action.SwitchChannel(it)) }
+                }
+            }
+        )
+    }
+
+    if (showCreateCategory) {
+        CreateCategoryDialog(
+            serverId = serverId,
+            onDismiss = {
+                showCreateCategory = false
+                coroutineScope.launch { onHideSheet() }
+            }
+        )
+    }
 
     if (showLeaveConfirmation) {
         AlertDialog(
@@ -169,39 +203,81 @@ fun ServerContextSheet(
                 )
             }
 
-            if (server.owner == StoatAPI.selfId) {
-                Box(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.primary)
-                ) {
-                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimary) {
-                        SheetSelection(
-                            icon = {},
-                            title = {
-                                Text(
-                                    text = stringResource(id = R.string.server_context_sheet_moderators_early_disclaimer_title)
-                                )
-                            },
-                            description = {
-                                Text(
-                                    text = stringResource(id = R.string.server_context_sheet_moderators_early_disclaimer_body)
-                                )
-                            },
-                            arrowTint = LocalContentColor.current.copy(alpha = 0.5f),
-                        ) {
-                            context.startActivity(
-                                Intent(
-                                    Intent.ACTION_VIEW,
-                                    "$STOAT_WEB_APP/server/${server.id}/settings".toUri()
-                                )
-                            )
-                        }
+            HorizontalDivider()
+        }
+
+        val permissions = selfServerPermissions(serverId)
+        val canManage = listOf(
+            PermissionBit.ManageServer, PermissionBit.ManageChannel, PermissionBit.ManageRole,
+            PermissionBit.ManageCustomisation, PermissionBit.KickMembers, PermissionBit.BanMembers,
+            PermissionBit.TimeoutMembers, PermissionBit.AssignRoles, PermissionBit.ManageNicknames,
+            PermissionBit.RemoveAvatars
+        ).any { permissions has it }
+
+        if (canManage) {
+            SheetButton(
+                leadingContent = {
+                    Icon(painter = painterResource(id = R.drawable.ic_settings_24dp), contentDescription = null)
+                },
+                headlineContent = { Text(text = stringResource(id = R.string.manage_server_settings)) },
+                modifier = Modifier.testTag("server_context_settings"),
+                onClick = {
+                    coroutineScope.launch {
+                        onHideSheet()
+                        ActionChannel.send(Action.TopNavigate("settings/server/$serverId"))
                     }
                 }
-            }
+            )
+        }
 
-            HorizontalDivider()
+        if (permissions has PermissionBit.ManageChannel) {
+            SheetButton(
+                leadingContent = {
+                    Icon(painter = painterResource(id = R.drawable.ic_add_24dp), contentDescription = null)
+                },
+                headlineContent = { Text(text = stringResource(id = R.string.manage_channel_create)) },
+                modifier = Modifier.testTag("server_context_create_channel"),
+                onClick = { showCreateChannel = true }
+            )
+            SheetButton(
+                leadingContent = {
+                    Icon(painter = painterResource(id = R.drawable.ic_add_24dp), contentDescription = null)
+                },
+                headlineContent = { Text(text = stringResource(id = R.string.manage_category_create)) },
+                onClick = { showCreateCategory = true }
+            )
+        }
+
+        val inviteChannel = server.channels.orEmpty()
+            .mapNotNull { StoatAPI.channelCache[it] }
+            .firstOrNull { channel ->
+                channel.channelType == ChannelType.TextChannel &&
+                        Roles.permissionFor(
+                            channel,
+                            StoatAPI.userCache[StoatAPI.selfId],
+                            StoatAPI.selfId?.let { StoatAPI.members.getMember(serverId, it) }
+                        )
+                            .hasPermission(PermissionBit.InviteOthers)
+            }
+        if (inviteChannel != null) {
+            SheetButton(
+                leadingContent = {
+                    Icon(painter = painterResource(id = R.drawable.ic_link_24dp), contentDescription = null)
+                },
+                headlineContent = { Text(text = stringResource(id = R.string.manage_invite_create)) },
+                modifier = Modifier.testTag("server_context_create_invite"),
+                onClick = {
+                    coroutineScope.launch {
+                        try {
+                            val invite = createChannelInvite(inviteChannel.id!!)
+                            copyWithToast(context, clipboardManager, "$STOAT_INVITES/${invite.code}")
+                        } catch (e: Exception) {
+                            Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
+                        }
+                        onHideSheet()
+                    }
+                }
+            )
         }
 
         SheetButton(
