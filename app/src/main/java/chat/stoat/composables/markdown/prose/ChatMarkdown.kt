@@ -4,10 +4,13 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.InlineTextContent
@@ -30,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
@@ -60,6 +64,7 @@ import chat.stoat.core.model.schemas.isInviteUri
 import chat.stoat.internals.resolveTimestamp
 import chat.stoat.internals.toNavigationAction
 import chat.stoat.internals.toStoatWebLinkOrNull
+import chat.stoat.screens.settings.server.copyWithToast
 import chat.stoat.markdown.CHANNEL_MENTION_ELEMENT_TYPE
 import chat.stoat.markdown.CUSTOM_EMOTE_ELEMENT_TYPE
 import chat.stoat.markdown.MASS_MENTION_ELEMENT_TYPE
@@ -87,7 +92,10 @@ import io.ratex.RaTeXView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.intellij.markdown.MarkdownElementTypes
+import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
+import org.intellij.markdown.ast.findChildOfType
 import org.intellij.markdown.ast.getTextInNode
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.parser.MarkdownParser
@@ -173,6 +181,32 @@ internal fun easyLineBreaks(content: String): String {
     return sb.toString()
 }
 
+// Returns the raw text of a fenced or indented code block, matching exactly what the highlighted
+// renderer displays (see MarkdownCodeFence/MarkdownCodeBlock upstream), so long-press copies what's
+// on screen. Returns null for anything that isn't a code block node.
+private fun codeBlockText(content: String, node: ASTNode): String? {
+    when (node.type) {
+        MarkdownElementTypes.CODE_FENCE -> {
+            if (node.children.size < 3) return null
+            val language = node.findChildOfType(MarkdownTokenTypes.FENCE_LANG)
+                ?.getTextInNode(content)?.toString()
+            val start = node.children[2].startOffset
+            val minCount = if (language != null && node.children.size > 3) 3 else 2
+            val end = node.children[(node.children.size - 2).coerceAtLeast(minCount)].endOffset
+            return content.subSequence(start, end).toString().replaceIndent()
+        }
+
+        MarkdownElementTypes.CODE_BLOCK -> {
+            if (node.children.isEmpty()) return null
+            val start = node.children[0].startOffset
+            val end = node.children[node.children.size - 1].endOffset
+            return content.subSequence(start, end).toString().replaceIndent()
+        }
+
+        else -> return null
+    }
+}
+
 @Composable
 fun ChatMarkdown(
     content: String,
@@ -197,6 +231,7 @@ fun ChatMarkdown(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatMarkdown(
     state: State,
@@ -206,6 +241,7 @@ fun ChatMarkdown(
 ) {
     val fontSize = LocalTextStyle.current.fontSize * fontSizeMultiplier
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val density = LocalDensity.current
     val fontSizePx = with(density) { fontSize.toPx() }
     val scope = rememberCoroutineScope()
@@ -556,18 +592,42 @@ fun ChatMarkdown(
                 image = {},
                 inlineImage = {},
                 codeBlock = {
-                    MarkdownHighlightedCodeBlock(
-                        content = it.content,
-                        node = it.node,
-                        highlightsBuilder = highlightsBuilder,
-                    )
+                    val rawCode = codeBlockText(it.content, it.node)
+                    Box(
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                rawCode?.let { code ->
+                                    copyWithToast(context, clipboardManager, code)
+                                }
+                            },
+                        )
+                    ) {
+                        MarkdownHighlightedCodeBlock(
+                            content = it.content,
+                            node = it.node,
+                            highlightsBuilder = highlightsBuilder,
+                        )
+                    }
                 },
                 codeFence = {
-                    MarkdownHighlightedCodeFence(
-                        content = it.content,
-                        node = it.node,
-                        highlightsBuilder = highlightsBuilder,
-                    )
+                    val rawCode = codeBlockText(it.content, it.node)
+                    Box(
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                rawCode?.let { code ->
+                                    copyWithToast(context, clipboardManager, code)
+                                }
+                            },
+                        )
+                    ) {
+                        MarkdownHighlightedCodeFence(
+                            content = it.content,
+                            node = it.node,
+                            highlightsBuilder = highlightsBuilder,
+                        )
+                    }
                 },
             ),
             modifier = modifier,
