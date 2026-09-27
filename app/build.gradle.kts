@@ -98,7 +98,7 @@ android {
             buildConfigField(
                 "String",
                 "SENTRY_DSN",
-                "\"${buildproperty("sentry.dsn", "RVX_SENTRY_DSN")}\""
+                "\"${buildproperty("sentry.dsn", "RVX_SENTRY_DSN") ?: ""}\""
             )
             buildConfigField(
                 "String",
@@ -121,7 +121,7 @@ android {
             buildConfigField(
                 "String",
                 "SENTRY_DSN",
-                "\"${buildproperty("sentry.dsn", "RVX_SENTRY_DSN")}\""
+                "\"${buildproperty("sentry.dsn", "RVX_SENTRY_DSN") ?: ""}\""
             )
             buildConfigField(
                 "String",
