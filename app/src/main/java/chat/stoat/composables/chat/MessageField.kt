@@ -141,6 +141,12 @@ sealed class AutocompleteSuggestion {
     data class MassMention(
         val content: String
     ) : AutocompleteSuggestion()
+
+    data class Command(
+        val name: String,
+        val description: String,
+        val apply: String?
+    ) : AutocompleteSuggestion()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -282,6 +288,12 @@ fun MessageField(
                             )
                         }
                     }
+
+                    lastWord.startsWith('/') -> {
+                        autocompleteSuggestions.addAll(
+                            Autocomplete.command(lastWord.substring(1))
+                        )
+                    }
                 }
             }
         }
@@ -328,6 +340,7 @@ fun MessageField(
                         is AutocompleteSuggestion.Emoji -> item.shortcode
                         is AutocompleteSuggestion.Role -> item.id
                         is AutocompleteSuggestion.MassMention -> item.content
+                        is AutocompleteSuggestion.Command -> item.name
                     }
                 }) {
                     when (val item = autocompleteSuggestions[it]) {
@@ -518,6 +531,26 @@ fun MessageField(
                                             .align(Alignment.CenterHorizontally)
                                     )
                                 },
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        is AutocompleteSuggestion.Command -> {
+                            SuggestionChip(
+                                onClick = {
+                                    textFieldState.edit {
+                                        val lastWordStartsAt =
+                                            textFieldState.text
+                                                .substring(0, textFieldState.selection.max)
+                                                .lastWordStartsAt()
+                                        replace(
+                                            if (lastWordStartsAt == -1) 0 else (lastWordStartsAt + 1),
+                                            textFieldState.selection.max,
+                                            (item.apply ?: "/${item.name}") + " "
+                                        )
+                                    }
+                                },
+                                label = { Text("/${item.name}") },
                                 modifier = Modifier.animateItem()
                             )
                         }

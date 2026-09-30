@@ -12,6 +12,27 @@ object Autocomplete {
     private val emojiImpl = EmojiImpl()
     private const val MAX_MEMBER_SUGGESTIONS = 50
 
+    // Client-side slash commands, mirroring the web client's command list.
+    private data class SlashCommand(
+        val name: String,
+        val description: String,
+        val apply: String? = null
+    )
+
+    private val SLASH_COMMANDS = listOf(
+        SlashCommand("shrug", "Insert a shrug", "¯\\_(ツ)_/¯"),
+        SlashCommand("tableflip", "Insert a table flip", "(╯°□°）╯︵ ┻━┻"),
+        SlashCommand("unflip", "Put the table back", "┬─┬ノ( º _ ºノ)"),
+        SlashCommand("lenny", "Insert a lenny face", "( ͡° ͜ʖ ͡°)"),
+        SlashCommand("me", "Send an action message (kept as /me for bots to parse)")
+    )
+
+    fun command(query: String): List<AutocompleteSuggestion.Command> {
+        return SLASH_COMMANDS
+            .filter { it.name.startsWith(query, ignoreCase = true) }
+            .map { AutocompleteSuggestion.Command(it.name, it.description, it.apply) }
+    }
+
     fun emoji(query: String): List<AutocompleteSuggestion.Emoji> {
         val unicodeResults = emojiImpl.shortcodeContains(query).map {
             AutocompleteSuggestion.Emoji(
