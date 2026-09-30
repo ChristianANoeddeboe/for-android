@@ -108,6 +108,8 @@ class ChannelScreenViewModel(
     var draftAttachments = mutableStateListOf<FileArgs>()
     var draftReplyTo = mutableStateListOf<SendMessageReply>()
     var attachmentUploadProgress by mutableStateOf(0f)
+    var uploadErrorMessage by mutableStateOf<String?>(null)
+        private set
 
     var didInitialChannelFetch by mutableStateOf(false)
     var canLoadOlder by mutableStateOf(false)
@@ -505,6 +507,11 @@ class ChannelScreenViewModel(
         }
     }
 
+    /** Clear the upload error after it has been shown to the user. */
+    fun clearUploadError() {
+        uploadErrorMessage = null
+    }
+
     fun sendPendingMessage() {
         if (isSending) return
 
@@ -569,7 +576,9 @@ class ChannelScreenViewModel(
                     Log.e("ChannelScreenViewModel", "Failed to upload attachment", e)
                     attachmentUploadProgress = 0f
                     isSending = false
-                    // TODO show error message
+                    uploadErrorMessage =
+                        e.message?.takeIf { it.isNotBlank() }
+                            ?: "Failed to upload file"
                     return@launch
                 }
             }

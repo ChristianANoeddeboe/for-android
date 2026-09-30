@@ -500,6 +500,17 @@ fun ChannelScreen(
             }
     }
 
+    // Surface upload failures (e.g. file too large) instead of failing silently
+    LaunchedEffect(viewModel.uploadErrorMessage) {
+        viewModel.uploadErrorMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message,
+                duration = SnackbarDuration.Long,
+            )
+            viewModel.clearUploadError()
+        }
+    }
+
     LaunchedEffect(lazyListState) {
         snapshotFlow {
             Triple(
