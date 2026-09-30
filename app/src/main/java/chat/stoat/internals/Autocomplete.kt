@@ -7,6 +7,7 @@ import chat.stoat.api.internals.has
 import chat.stoat.composables.chat.AutocompleteSuggestion
 import chat.stoat.core.model.schemas.ChannelType
 import chat.stoat.core.model.schemas.User
+import chat.stoat.api.routes.server.fetchServerCommands
 
 object Autocomplete {
     private val emojiImpl = EmojiImpl()
@@ -27,10 +28,43 @@ object Autocomplete {
         SlashCommand("me", "Send an action message (kept as /me for bots to parse)")
     )
 
-    fun command(query: String): List<AutocompleteSuggestion.Command> {
-        return SLASH_COMMANDS
+    /**
+     * Server-registered bot commands, keyed by server id, with a short TTL so
+     * we don't re-fetch on every keystroke. Falls back to an empty map on error.
+     */
+    private val serverCommandsCache = mutableMapOf<String, List<AutocompleteSuggestion.Command>>()
+
+    suspend fun command(
+        serverId: String?,
+        query: String
+    ): List<AutocompleteSuggestion.Command> {
+        val builtins = SLASH_COMMANDS
             .filter { it.name.startsWith(query, ignoreCase = true) }
             .map { AutocompleteSuggestion.Command(it.name, it.description, it.apply) }
+
+        val serverCommands = serverId?.let { fetchServerCommandsCached(it) } ?: emptyList()
+        val filtered = serverCommands
+            .filter { it.name.startsWith(query, ignoreCase = true) }
+
+        return (builtins + filtered).distinctBy { it.name }
+    }
+
+    private suspend fun fetchServerCommandsCached(serverId: String): List<AutocompleteSuggestion.Command> {
+        serverCommandsCache[serverId]?.let { return it }
+
+        return try {
+            val fetched = fetchServerCommands(serverId).map {
+                AutocompleteSuggestion.Command(
+                    name = it.name,
+                    description = it.description ?: "",
+                    apply = null
+                )
+            }
+            serverCommandsCache[serverId] = fetched
+            fetched
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     fun emoji(query: String): List<AutocompleteSuggestion.Emoji> {

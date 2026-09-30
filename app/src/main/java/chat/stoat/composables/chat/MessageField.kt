@@ -291,7 +291,10 @@ fun MessageField(
 
                     lastWord.startsWith('/') -> {
                         autocompleteSuggestions.addAll(
-                            Autocomplete.command(lastWord.substring(1))
+                            Autocomplete.command(
+                                serverId,
+                                lastWord.substring(1)
+                            )
                         )
                     }
                 }
