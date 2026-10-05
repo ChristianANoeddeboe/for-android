@@ -3,11 +3,14 @@ package chat.stoat.screens.settings.server
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -16,6 +19,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -24,17 +28,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import chat.stoat.R
 import chat.stoat.api.StoatAPI
@@ -47,7 +56,11 @@ import chat.stoat.composables.generic.ListHeader
 import chat.stoat.core.model.schemas.Category
 import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
  * Save new categories and mirror them in the cache right away
@@ -187,13 +200,39 @@ fun CreateCategoryDialog(serverId: String, onDismiss: () -> Unit, onError: (Stri
     )
 }
 
+/**
+ * One row in the reorderable channel management list.
+ */
+private sealed class ChannelRowItem {
+    abstract val key: String
+}
+
+/**
+ * Fixed "Uncategorised" section header (not itself reorderable).
+ */
+private class UncategorisedHeader : ChannelRowItem() {
+    override val key = "__uncat_header"
+}
+
+/**
+ * Reorderable category header.
+ */
+private class CategoryHeaderEntry(val categoryId: String, val title: String) : ChannelRowItem() {
+    override val key = "cat:$categoryId"
+}
+
+/**
+ * Reorderable channel row, belonging to `categoryId` (or null when uncategorised).
+ */
+private class ChannelEntry(val categoryId: String?, val channelId: String) : ChannelRowItem() {
+    override val key = "ch:$channelId"
+}
+
 @Composable
 fun ServerSettingsChannels(navController: NavController, serverId: String) {
     val scope = rememberCoroutineScope()
     val server = StoatAPI.serverCache[serverId]
     val categories = server?.categories.orEmpty()
-    val categorised = categories.flatMap { it.channels.orEmpty() }.toSet()
-    val uncategorised = server?.channels.orEmpty().filter { it !in categorised }
 
     var error by remember { mutableStateOf<String?>(null) }
     var showCreateChannel by remember { mutableStateOf(false) }
@@ -214,42 +253,67 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
         }
     }
 
-    /**
-     * Move a channel one step, crossing into the neighbouring category at the edges
-     */
-    fun moveStep(channelId: String, up: Boolean) {
-        val lists = categories.map { it.channels.orEmpty().toMutableList() }
-        val index = lists.indexOfFirst { channelId in it }
-        if (index == -1) {
-            // Uncategorised channels only move down into the first category
-            if (!up && lists.isNotEmpty()) {
-                lists[0].add(0, channelId)
-            } else return
-        } else {
-            val list = lists[index]
-            val pos = list.indexOf(channelId)
-            val target = if (up) pos - 1 else pos + 1
-            if (target in list.indices) {
-                list.removeAt(pos)
-                list.add(target, channelId)
-            } else if (up) {
-                list.removeAt(pos)
-                if (index > 0) lists[index - 1].add(channelId)
-            } else if (index < lists.size - 1) {
-                list.removeAt(pos)
-                lists[index + 1].add(0, channelId)
-            } else return
+    // Flat list of everything (uncategorised + categories + channels) driving the reorder UI
+    val reorderItems = remember { mutableStateListOf<ChannelRowItem>() }
+    androidx.compose.runtime.LaunchedEffect(server) {
+        val categorised = categories.flatMap { it.channels.orEmpty() }.toSet()
+        val uncategorised = server?.channels.orEmpty().filter { it !in categorised }
+        reorderItems.clear()
+        if (uncategorised.isNotEmpty()) {
+            reorderItems.add(UncategorisedHeader())
+            uncategorised.forEach { reorderItems.add(ChannelEntry(null, it)) }
         }
-        save(categories.mapIndexed { i, c -> c.copy(channels = lists[i]) })
+        categories.forEach { cat ->
+            reorderItems.add(CategoryHeaderEntry(cat.id ?: "", cat.title ?: ""))
+            cat.channels.orEmpty().forEach { reorderItems.add(ChannelEntry(cat.id, it)) }
+        }
     }
 
-    fun moveCategory(index: Int, up: Boolean) {
-        val target = if (up) index - 1 else index + 1
-        if (target !in categories.indices) return
-        val list = categories.toMutableList()
-        val item = list.removeAt(index)
-        list.add(target, item)
-        save(list)
+    val lazyListState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val item = reorderItems.removeAt(from.index)
+        val target = to.index.coerceIn(0, reorderItems.size)
+        reorderItems.add(target, item)
+    }
+
+    /**
+     * Persist the final flat order back into categories.
+     * Any channel dropped before the first category header stays uncategorised.
+     */
+    fun commitReorder() {
+        val byId = categories.associateBy { it.id }
+        val newCats = mutableListOf<Category>()
+        var currentCat: Category? = null
+        var currentChannels = mutableListOf<String>()
+        fun flush() {
+            currentCat?.let { newCats.add(it.copy(channels = currentChannels.toList())) }
+        }
+        for (row in reorderItems) {
+            when (row) {
+                is UncategorisedHeader -> {
+                    flush()
+                    currentCat = null
+                    currentChannels = mutableListOf()
+                }
+                is CategoryHeaderEntry -> {
+                    flush()
+                    currentCat = byId[row.categoryId]?.copy(channels = emptyList())
+                        ?: Category(id = row.categoryId, title = row.title, channels = emptyList())
+                    currentChannels = mutableListOf()
+                }
+                is ChannelEntry -> currentChannels.add(row.channelId)
+            }
+        }
+        flush()
+        save(newCats)
+    }
+
+    // Persist once when a drag settles (onMove fires live during the drag)
+    LaunchedEffect(reorderState) {
+        snapshotFlow { reorderState.isAnyItemDragging }
+            .distinctUntilChanged()
+            .drop(1)
+            .collect { dragging -> if (!dragging) commitReorder() }
     }
 
     if (showCreateChannel) {
@@ -346,7 +410,8 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
         }
     ) { pv ->
         LazyColumn(
-            Modifier
+            state = lazyListState,
+            modifier = Modifier
                 .padding(pv)
                 .fillMaxSize()
         ) {
@@ -359,55 +424,29 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
                 )
             }
 
-            if (uncategorised.isNotEmpty()) {
-                item { ListHeader { Text(stringResource(R.string.manage_category_none)) } }
-                items(uncategorised, key = { "u$it" }) { channelId ->
-                    ChannelRow(
-                        channelId,
-                        canUp = false,
-                        canDown = categories.isNotEmpty(),
-                        onUp = {},
-                        onDown = { moveStep(channelId, false) },
-                        onMove = { moveChannel = channelId },
-                        onOpen = { navController.navigate("settings/channel/$channelId") }
-                    )
-                }
-            }
-
-            categories.forEachIndexed { index, category ->
-                item(key = "c${category.id}") {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                (category.title ?: "").uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        },
-                        trailingContent = {
-                            CategoryActions(
-                                canUp = index > 0,
-                                canDown = index < categories.size - 1,
-                                onUp = { moveCategory(index, true) },
-                                onDown = { moveCategory(index, false) },
-                                onRename = { renameCategory = category },
-                                onDelete = { deleteCategory = category }
-                            )
-                        },
-                        modifier = Modifier.testTag("category_${category.title}")
-                    )
-                }
-                items(category.channels.orEmpty(), key = { "${category.id}-$it" }) { channelId ->
-                    val pos = category.channels.orEmpty().indexOf(channelId)
-                    ChannelRow(
-                        channelId,
-                        canUp = true,
-                        canDown = pos < category.channels.orEmpty().size - 1 || index < categories.size - 1,
-                        onUp = { moveStep(channelId, true) },
-                        onDown = { moveStep(channelId, false) },
-                        onMove = { moveChannel = channelId },
-                        onOpen = { navController.navigate("settings/channel/$channelId") }
-                    )
+            items(reorderItems, key = { it.key }) { row ->
+                ReorderableItem(reorderState, key = row.key) { isDragging ->
+                    val handle = Modifier.draggableHandle()
+                    when (row) {
+                        is UncategorisedHeader -> {
+                            ListHeader {
+                                Text(stringResource(R.string.manage_category_none))
+                            }
+                        }
+                        is CategoryHeaderEntry -> CategoryReorderRow(
+                            title = row.title,
+                            handleModifier = handle,
+                            isDragging = isDragging,
+                            onRename = { renameCategory = categories.firstOrNull { it.id == row.categoryId } },
+                            onDelete = { deleteCategory = categories.firstOrNull { it.id == row.categoryId } }
+                        )
+                        is ChannelEntry -> ChannelRow(
+                            channelId = row.channelId,
+                            handleModifier = handle,
+                            onMove = { moveChannel = row.channelId },
+                            onOpen = { navController.navigate("settings/channel/${row.channelId}") }
+                        )
+                    }
                 }
             }
         }
@@ -417,10 +456,7 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
 @Composable
 private fun ChannelRow(
     channelId: String,
-    canUp: Boolean,
-    canDown: Boolean,
-    onUp: () -> Unit,
-    onDown: () -> Unit,
+    handleModifier: Modifier,
     onMove: () -> Unit,
     onOpen: () -> Unit
 ) {
@@ -428,15 +464,19 @@ private fun ChannelRow(
     var menu by remember { mutableStateOf(false) }
     ListItem(
         headlineContent = { Text(channel?.name ?: channelId, maxLines = 1) },
-        leadingContent = { Icon(painterResource(channelIcon(channel)), null) },
+        leadingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painterResource(R.drawable.ic_drag_handle_24dp),
+                    stringResource(R.string.manage_drag_handle),
+                    modifier = handleModifier
+                )
+                Spacer(Modifier.width(12.dp))
+                Icon(painterResource(channelIcon(channel)), null)
+            }
+        },
         trailingContent = {
             Row {
-                IconButton(onClick = onUp, enabled = canUp) {
-                    Icon(painterResource(R.drawable.ic_arrow_upward_24dp), stringResource(R.string.manage_move_up))
-                }
-                IconButton(onClick = onDown, enabled = canDown) {
-                    Icon(painterResource(R.drawable.ic_arrow_downward_24dp), stringResource(R.string.manage_move_down))
-                }
                 IconButton(onClick = { menu = true }) {
                     Icon(painterResource(R.drawable.ic_more_vert_24dp), stringResource(R.string.manage_more))
                 }
@@ -465,40 +505,55 @@ private fun ChannelRow(
 }
 
 @Composable
-private fun CategoryActions(
-    canUp: Boolean,
-    canDown: Boolean,
-    onUp: () -> Unit,
-    onDown: () -> Unit,
+private fun CategoryReorderRow(
+    title: String,
+    handleModifier: Modifier,
+    isDragging: Boolean,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
-    Row {
-        IconButton(onClick = onUp, enabled = canUp) {
-            Icon(painterResource(R.drawable.ic_arrow_upward_24dp), stringResource(R.string.manage_move_up))
-        }
-        IconButton(onClick = onDown, enabled = canDown) {
-            Icon(painterResource(R.drawable.ic_arrow_downward_24dp), stringResource(R.string.manage_move_down))
-        }
-        IconButton(onClick = { menu = true }) {
-            Icon(painterResource(R.drawable.ic_more_vert_24dp), stringResource(R.string.manage_more))
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.manage_category_rename)) },
-                onClick = {
-                    menu = false
-                    onRename()
-                }
+    ListItem(
+        headlineContent = {
+            Text(
+                title.uppercase(),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.manage_delete), color = MaterialTheme.colorScheme.error) },
-                onClick = {
-                    menu = false
-                    onDelete()
-                }
+        },
+        leadingContent = {
+            Icon(
+                painterResource(R.drawable.ic_drag_handle_24dp),
+                stringResource(R.string.manage_drag_handle),
+                modifier = handleModifier
             )
-        }
-    }
+        },
+        colors = if (isDragging) ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ) else ListItemDefaults.colors(),
+        trailingContent = {
+            Row {
+                IconButton(onClick = { menu = true }) {
+                    Icon(painterResource(R.drawable.ic_more_vert_24dp), stringResource(R.string.manage_more))
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.manage_category_rename)) },
+                        onClick = {
+                            menu = false
+                            onRename()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.manage_delete), color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menu = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
+        },
+        modifier = Modifier.testTag("category_$title")
+    )
 }

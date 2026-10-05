@@ -197,6 +197,7 @@ dependencies {
     implementation(libs.compose.material3.windowsizeclass)
     implementation(libs.compose.material.icons.core)
     implementation(libs.compose.runtime.livedata)
+    implementation(libs.compose.reorderable)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.process)

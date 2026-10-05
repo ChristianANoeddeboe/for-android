@@ -80,6 +80,7 @@
     <string name="manage_members_search">Search members</string>
     <string name="manage_moderation">Moderation</string>
     <string name="manage_more">More</string>
+    <string name="manage_drag_handle">Reorder</string>
     <string name="manage_move_down">Move down</string>
     <string name="manage_move_up">Move up</string>
     <string name="manage_off">Off</string>
