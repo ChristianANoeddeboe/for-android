@@ -39,7 +39,9 @@ import chat.stoat.api.StoatAPI
 import chat.stoat.api.internals.PermissionBit
 import chat.stoat.api.internals.Roles
 import chat.stoat.api.internals.has
+import chat.stoat.api.routes.channel.ackChannel
 import chat.stoat.api.routes.channel.deleteMessage
+import chat.stoat.api.routes.channel.fetchMessagesFromChannel
 import chat.stoat.api.routes.channel.react
 import chat.stoat.callbacks.UiCallbacks
 import chat.stoat.composables.chat.Message
@@ -427,14 +429,26 @@ fun MessageContextSheet(
                 )
             },
             onClick = {
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.comingsoon_toast),
-                    Toast.LENGTH_SHORT
-                ).show()
-
                 coroutineScope.launch {
                     onHideSheet()
+
+                    val channelId = message.channel ?: return@launch
+
+                    // Mark this message as unread: move the read boundary to
+                    // the message immediately before it, so this message
+                    // becomes the first unread one. Acking an older id is
+                    // supported server-side (last_id is set unconditionally).
+                    val predecessor = try {
+                        fetchMessagesFromChannel(
+                            channelId = channelId,
+                            limit = 1,
+                            before = messageId
+                        ).messages?.firstOrNull()
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    predecessor?.id?.let { ackChannel(channelId, it) }
                 }
             }
         )
