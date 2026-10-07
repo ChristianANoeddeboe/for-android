@@ -86,11 +86,16 @@ object AppUpdater {
         )
     }
 
-    /** First paragraph of the release notes, which is written as a plain summary. */
-    private fun summary(body: String): String? =
-        body.trim().split(Regex("\\r?\\n\\s*\\r?\\n")).firstOrNull()
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() && !it.startsWith("#") }
+    /** First non-heading text block of the release notes, shown as the changelog. */
+    private fun summary(body: String): String? {
+        val lines = body.lines()
+            .dropWhile { it.isBlank() || it.trimStart().startsWith("#") }
+        return lines
+            .takeWhile { it.isNotBlank() }
+            .joinToString("\n")
+            .trim()
+            .takeIf { it.isNotEmpty() }
+    }
 
     /** Removes APKs left over from earlier downloads, including an already installed update. */
     fun clearDownloads(context: Context) {
