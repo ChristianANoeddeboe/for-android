@@ -686,6 +686,7 @@ fun ChannelScreen(
             }
         ) {
             MessageContextSheet(
+                channelId = channelId,
                 messageId = messageContextSheetTarget,
                 onCreateThread = {
                     createThreadTarget = messageContextSheetTarget

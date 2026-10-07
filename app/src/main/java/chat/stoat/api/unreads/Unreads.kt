@@ -78,6 +78,20 @@ class Unreads {
         }
     }
 
+    /**
+     * Mark this message (and everything after it) as unread, locally and on the server.
+     * Sets the channel's read boundary to `messageId` (older than latest), so the channel
+     * shows as unread from that message onward.
+     */
+    suspend fun markAsUnread(channelId: String, messageId: String) {
+        channels[channelId] = ChannelUnread(
+            id = channelId,
+            last_id = messageId,
+            mentions = channels[channelId]?.mentions
+        )
+        ackChannel(channelId, messageId)
+    }
+
     suspend fun markServerAsRead(serverId: String, sync: Boolean = true) {
         if (!hasLoaded.value) return
 

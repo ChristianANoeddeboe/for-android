@@ -39,7 +39,6 @@ import chat.stoat.api.StoatAPI
 import chat.stoat.api.internals.PermissionBit
 import chat.stoat.api.internals.Roles
 import chat.stoat.api.internals.has
-import chat.stoat.api.routes.channel.ackChannel
 import chat.stoat.api.routes.channel.deleteMessage
 import chat.stoat.api.routes.channel.fetchMessagesFromChannel
 import chat.stoat.api.routes.channel.react
@@ -56,6 +55,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageContextSheet(
+    channelId: String,
     messageId: String,
     onHideSheet: suspend () -> Unit,
     onReportMessage: () -> Unit,
@@ -432,8 +432,6 @@ fun MessageContextSheet(
                 coroutineScope.launch {
                     onHideSheet()
 
-                    val channelId = message.channel ?: return@launch
-
                     // Mark this message as unread: move the read boundary to
                     // the message immediately before it, so this message
                     // becomes the first unread one. Acking an older id is
@@ -448,7 +446,9 @@ fun MessageContextSheet(
                         null
                     }
 
-                    predecessor?.id?.let { ackChannel(channelId, it) }
+                    predecessor?.id?.let {
+                        StoatAPI.unreads.markAsUnread(channelId, it)
+                    }
                 }
             }
         )
