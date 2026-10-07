@@ -48,7 +48,7 @@
     <string name="manage_channel_type_text">Text</string>
     <string name="manage_channel_type_voice">Voice</string>
     <string name="manage_channels">Channels</string>
-    <string name="manage_channels_hint">Use the arrows to reorder channels and categories.</string>
+    <string name="manage_channels_hint">Drag the handle to reorder channels and categories.</string>
     <string name="manage_create">Create</string>
     <string name="manage_danger_zone">Danger zone</string>
     <string name="manage_default_reaction">Default reaction</string>
