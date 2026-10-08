@@ -870,7 +870,11 @@ class ChannelScreenViewModel(
     }
 
     suspend fun ackMessage(messageId: String) {
-        ackChannel(channel?.id ?: return, messageId)
+        val channelId = channel?.id ?: return
+        // Don't let an auto-ack (channel open/scroll) silently re-read a channel the user
+        // manually marked unread. Acknowledged only once read past the manual anchor.
+        if (StoatAPI.unreads.blocksAutoAck(channelId, messageId)) return
+        ackChannel(channelId, messageId)
     }
 
     private fun hydrateIncomingMessage(message: MessageFrame, expectedChannelId: String) {
@@ -898,6 +902,9 @@ class ChannelScreenViewModel(
         if (messageId != null) {
             viewModelScope.launch {
                 try {
+                    // A genuinely new incoming message past the manual mark-as-unread anchor
+                    // means the user is reading the new content, so lift the anchor and ack it.
+                    StoatAPI.unreads.liftAnchorOnNewMessage(expectedChannelId, messageId)
                     ackChannel(expectedChannelId, messageId)
                 } catch (e: CancellationException) {
                     throw e

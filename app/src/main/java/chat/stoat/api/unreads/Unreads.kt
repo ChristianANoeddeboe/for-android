@@ -15,6 +15,7 @@ import chat.stoat.api.settings.NotificationSettingsProvider
 class Unreads {
     private val hasLoaded = mutableStateOf(false)
     private val channels = mutableStateMapOf<String, ChannelUnread>()
+    private val ackAnchors = mutableStateMapOf<String, String>()
 
     suspend fun sync() {
         channels.clear()
@@ -81,7 +82,8 @@ class Unreads {
     /**
      * Mark this message (and everything after it) as unread, locally and on the server.
      * Sets the channel's read boundary to `messageId` (older than latest), so the channel
-     * shows as unread from that message onward.
+     * shows as unread from that message onward. Also records an "anchor" so the channel's
+     * auto-ack (scroll/on-open) can't silently re-read it past this point.
      */
     suspend fun markAsUnread(channelId: String, messageId: String) {
         channels[channelId] = ChannelUnread(
@@ -89,7 +91,27 @@ class Unreads {
             last_id = messageId,
             mentions = channels[channelId]?.mentions
         )
+        ackAnchors[channelId] = messageId
         ackChannel(channelId, messageId)
+    }
+
+    /**
+     * True if an auto-ack of `messageId` would advance this channel's read boundary past a
+     * manually-set mark-as-unread anchor — i.e. it would silently re-read the channel while
+     * you're in it. Such auto-acks are skipped so the channel stays unread.
+     */
+    fun blocksAutoAck(channelId: String, messageId: String): Boolean {
+        val anchor = ackAnchors[channelId] ?: return false
+        return messageId > anchor
+    }
+
+    /**
+     * A genuinely new incoming message beyond the anchor means the user is reading new content,
+     * so lift the anchor (and allow the ack it normally triggers).
+     */
+    fun liftAnchorOnNewMessage(channelId: String, messageId: String) {
+        val anchor = ackAnchors[channelId] ?: return
+        if (messageId > anchor) ackAnchors.remove(channelId)
     }
 
     suspend fun markServerAsRead(serverId: String, sync: Boolean = true) {
@@ -150,6 +172,7 @@ class Unreads {
 
     fun clear() {
         channels.clear()
+        ackAnchors.clear()
         hasLoaded.value = false
     }
 }
