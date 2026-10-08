@@ -63,8 +63,8 @@ android {
         applicationId = "chat.revolt"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = Integer.parseInt("001_007_017".replace("_", ""), 10)
-        versionName = "1.7.2-selfhosted.16"
+        versionCode = Integer.parseInt("001_007_018".replace("_", ""), 10)
+        versionName = "1.7.2-selfhosted.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
