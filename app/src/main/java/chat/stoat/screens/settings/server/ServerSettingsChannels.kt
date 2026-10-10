@@ -35,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -56,8 +55,6 @@ import chat.stoat.composables.generic.ListHeader
 import chat.stoat.core.model.schemas.Category
 import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -183,7 +180,8 @@ fun CreateCategoryDialog(serverId: String, onDismiss: () -> Unit, onError: (Stri
         label = stringResource(R.string.manage_category_name),
         confirmLabel = stringResource(R.string.manage_create),
         onConfirm = { title ->
-            onDismiss()
+            // Dismiss only after saving: dismissing first disposes this dialog's
+            // scope and cancels the save ("rememberCoroutineScope left the composition")
             scope.launch {
                 try {
                     val current = StoatAPI.serverCache[serverId]?.categories.orEmpty()
@@ -194,6 +192,7 @@ fun CreateCategoryDialog(serverId: String, onDismiss: () -> Unit, onError: (Stri
                 } catch (e: Exception) {
                     onError(e.message)
                 }
+                onDismiss()
             }
         },
         onDismiss = onDismiss
@@ -205,6 +204,25 @@ fun CreateCategoryDialog(serverId: String, onDismiss: () -> Unit, onError: (Stri
  */
 private sealed class ChannelRowItem {
     abstract val key: String
+}
+
+/**
+ * Category id the web client uses to store the order of uncategorised channels
+ */
+private const val DEFAULT_CATEGORY = "default"
+
+/**
+ * Split server categories into real categories and the ordered uncategorised channels.
+ * The hidden "default" category (if present) supplies the uncategorised order.
+ */
+private fun splitDefault(categories: List<Category>, channels: List<String>): Pair<List<Category>, List<String>> {
+    val cats = categories.filter { it.id != DEFAULT_CATEGORY }
+    val categorised = cats.flatMap { it.channels.orEmpty() }.toSet()
+    val known = channels.toSet()
+    val ordered = categories.firstOrNull { it.id == DEFAULT_CATEGORY }?.channels.orEmpty()
+        .filter { it in known && it !in categorised }
+    val rest = channels.filter { it !in categorised && it !in ordered }
+    return cats to (ordered + rest)
 }
 
 /**
@@ -255,65 +273,81 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
 
     // Flat list of everything (uncategorised + categories + channels) driving the reorder UI
     val reorderItems = remember { mutableStateListOf<ChannelRowItem>() }
-    androidx.compose.runtime.LaunchedEffect(server) {
-        val categorised = categories.flatMap { it.channels.orEmpty() }.toSet()
-        val uncategorised = server?.channels.orEmpty().filter { it !in categorised }
+
+    fun rebuild(cats: List<Category>, uncategorised: List<String>) {
         reorderItems.clear()
         if (uncategorised.isNotEmpty()) {
             reorderItems.add(UncategorisedHeader())
             uncategorised.forEach { reorderItems.add(ChannelEntry(null, it)) }
         }
-        categories.forEach { cat ->
+        cats.forEach { cat ->
             reorderItems.add(CategoryHeaderEntry(cat.id ?: "", cat.title ?: ""))
             cat.channels.orEmpty().forEach { reorderItems.add(ChannelEntry(cat.id, it)) }
         }
     }
 
+    LaunchedEffect(server) {
+        val (cats, uncategorised) = splitDefault(categories, server?.channels.orEmpty())
+        rebuild(cats, uncategorised)
+    }
+
+    // Key of the row currently being dragged (set by the drag handle)
+    var draggedKey by remember { mutableStateOf<String?>(null) }
+
     val lazyListState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val item = reorderItems.removeAt(from.index)
-        val target = to.index.coerceIn(0, reorderItems.size)
-        reorderItems.add(target, item)
+        // LazyColumn indices include the leading error/hint items, so map by key
+        val fromIndex = reorderItems.indexOfFirst { it.key == from.key }
+        val toIndex = reorderItems.indexOfFirst { it.key == to.key }
+        if (fromIndex >= 0 && toIndex >= 0) {
+            reorderItems.add(toIndex, reorderItems.removeAt(fromIndex))
+        }
     }
 
     /**
      * Persist the final flat order back into categories.
-     * Any channel dropped before the first category header stays uncategorised.
+     *
+     * Category order follows the order of the headers. A channel keeps its
+     * original category unless it is the row that was dragged, in which case it
+     * joins the nearest header above it (none = uncategorised). This way,
+     * dragging a category header moves the whole category with its channels.
      */
     fun commitReorder() {
-        val byId = categories.associateBy { it.id }
-        val newCats = mutableListOf<Category>()
-        var currentCat: Category? = null
-        var currentChannels = mutableListOf<String>()
-        fun flush() {
-            currentCat?.let { newCats.add(it.copy(channels = currentChannels.toList())) }
-        }
+        val dragged = draggedKey
+        draggedKey = null
+        val current = StoatAPI.serverCache[serverId]?.categories.orEmpty()
+        val byId = current.associateBy { it.id }
+        val originalParent = current
+            .filter { it.id != DEFAULT_CATEGORY }
+            .flatMap { cat -> cat.channels.orEmpty().map { it to cat.id } }
+            .toMap()
+
+        val headerOrder = mutableListOf<String>()
+        val newParent = linkedMapOf<String, String?>()
+        var lastHeader: String? = null
         for (row in reorderItems) {
             when (row) {
-                is UncategorisedHeader -> {
-                    flush()
-                    currentCat = null
-                    currentChannels = mutableListOf()
-                }
+                is UncategorisedHeader -> lastHeader = null
                 is CategoryHeaderEntry -> {
-                    flush()
-                    currentCat = byId[row.categoryId]?.copy(channels = emptyList())
-                        ?: Category(id = row.categoryId, title = row.title, channels = emptyList())
-                    currentChannels = mutableListOf()
+                    headerOrder.add(row.categoryId)
+                    lastHeader = row.categoryId
                 }
-                is ChannelEntry -> currentChannels.add(row.channelId)
+                is ChannelEntry -> newParent[row.channelId] =
+                    if (row.key == dragged) lastHeader else originalParent[row.channelId]
             }
         }
-        flush()
-        save(newCats)
-    }
 
-    // Persist once when a drag settles (onMove fires live during the drag)
-    LaunchedEffect(reorderState) {
-        snapshotFlow { reorderState.isAnyItemDragging }
-            .distinctUntilChanged()
-            .drop(1)
-            .collect { dragging -> if (!dragging) commitReorder() }
+        val newCats = headerOrder.mapNotNull { id ->
+            byId[id]?.copy(channels = newParent.filterValues { it == id }.keys.toList())
+        }
+        val uncategorised = newParent.filterValues { it == null }.keys.toList()
+
+        // Snap the list into its regrouped shape right away
+        rebuild(newCats, uncategorised)
+        // Uncategorised order is kept in a hidden "default" category, same as the web client
+        val toSave = if (uncategorised.isEmpty()) newCats
+        else listOf(Category(id = DEFAULT_CATEGORY, title = "Default", channels = uncategorised)) + newCats
+        if (toSave != current) save(toSave)
     }
 
     if (showCreateChannel) {
@@ -354,7 +388,7 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
                 title = { Text(stringResource(R.string.manage_channel_move_to)) },
                 text = {
                     LazyColumn {
-                        val targets = listOf<Category?>(null) + categories
+                        val targets = listOf<Category?>(null) + categories.filter { it.id != DEFAULT_CATEGORY }
                         items(targets) { target ->
                             ListItem(
                                 headlineContent = {
@@ -426,7 +460,10 @@ fun ServerSettingsChannels(navController: NavController, serverId: String) {
 
             items(reorderItems, key = { it.key }) { row ->
                 ReorderableItem(reorderState, key = row.key) { isDragging ->
-                    val handle = Modifier.draggableHandle()
+                    val handle = Modifier.draggableHandle(
+                        onDragStarted = { draggedKey = row.key },
+                        onDragStopped = { commitReorder() }
+                    )
                     when (row) {
                         is UncategorisedHeader -> {
                             ListHeader {
