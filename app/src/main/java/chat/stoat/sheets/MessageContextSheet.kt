@@ -290,10 +290,10 @@ fun MessageContextSheet(
                     onClick = {
                         showDeleteMessageConfirmation = false
                         coroutineScope.launch {
+                            // Delete before hiding the sheet — see the mark-unread note:
+                            // onHideSheet() drops the sheet and cancels this scope.
+                            deleteMessage(channelId, messageId)
                             onHideSheet()
-                            message.channel?.let { channelId ->
-                                deleteMessage(channelId, messageId)
-                            }
                         }
                     }
                 ) {
@@ -430,12 +430,14 @@ fun MessageContextSheet(
             },
             onClick = {
                 coroutineScope.launch {
-                    onHideSheet()
-
                     // Mark this message as unread: move the read boundary to
                     // the message immediately before it, so this message
                     // becomes the first unread one. Acking an older id is
                     // supported server-side (last_id is set unconditionally).
+                    //
+                    // NOTE: this must run BEFORE onHideSheet() — hiding the sheet drops it
+                    // from the composition and cancels this scope, which would abort the
+                    // suspension points below (the whole operation silently did nothing).
                     val predecessor = try {
                         fetchMessagesFromChannel(
                             channelId = channelId,
@@ -449,6 +451,8 @@ fun MessageContextSheet(
                     predecessor?.id?.let {
                         StoatAPI.unreads.markAsUnread(channelId, it)
                     }
+
+                    onHideSheet()
                 }
             }
         )
