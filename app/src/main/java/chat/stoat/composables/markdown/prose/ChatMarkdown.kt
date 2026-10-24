@@ -591,6 +591,7 @@ fun ChatMarkdown(
             components = markdownComponents(
                 image = {},
                 inlineImage = {},
+                table = { StoatTable(it) },
                 codeBlock = {
                     val rawCode = codeBlockText(it.content, it.node)
                     Box(

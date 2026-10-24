@@ -31,6 +31,7 @@ fun ProseMarkdown(markdownText: String, modifier: Modifier = Modifier) {
             paragraph = MaterialTheme.typography.bodyLarge.copy(lineHeight = 25.sp),
         ),
         components = markdownComponents(
+            table = { StoatTable(it) },
             checkbox = {
                 MarkdownCheckBox(
                     it.content,

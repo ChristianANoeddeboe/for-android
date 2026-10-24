@@ -10,7 +10,7 @@ import com.mikepenz.markdown.model.rememberMarkdownState
 fun UIMarkdown(input: String, modifier: Modifier = Modifier) {
     Markdown(
         markdownState = rememberMarkdownState(content = input, immediate = true),
-        components = markdownComponents(image = {}, inlineImage = {}),
+        components = markdownComponents(image = {}, inlineImage = {}, table = { StoatTable(it) }),
         modifier = modifier,
     )
 }
