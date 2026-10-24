@@ -70,6 +70,11 @@ data class AndroidSpecificSettings(
      */
     var avatarRadius: Int? = null,
     /**
+     * The markdown render engine to use for chat messages.
+     * Can be one of `{ markdown, obsidian }`. Defaults to `markdown` (existing behaviour).
+     */
+    var markdownEngine: String? = null,
+    /**
      * Controls preferences for special embeds.
      * Object; See [AndroidSpecificSettingsSpecialEmbedSettings] for format.
      */

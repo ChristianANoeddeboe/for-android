@@ -30,6 +30,7 @@ object LoadedSettings {
     var specialEmbedSettings by mutableStateOf(SpecialEmbedSettings())
     var poorlyFormedSettingsKeys by mutableStateOf(emptySet<String>())
     var font by mutableStateOf(getDefaultFont())
+    var markdownEngine by mutableStateOf("markdown")
 
     fun hydrateWithSettings(settings: SyncedSettings) {
         this.theme = settings.android.theme?.let {
@@ -47,6 +48,7 @@ object LoadedSettings {
                 null
             }
         } ?: getDefaultFont()
+        this.markdownEngine = settings.android.markdownEngine ?: "markdown"
     }
 
     fun reset() {
@@ -56,5 +58,6 @@ object LoadedSettings {
         specialEmbedSettings = SpecialEmbedSettings()
         poorlyFormedSettingsKeys = emptySet()
         font = getDefaultFont()
+        markdownEngine = "markdown"
     }
 }

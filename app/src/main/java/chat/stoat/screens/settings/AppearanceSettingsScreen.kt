@@ -109,6 +109,13 @@ class AppearanceSettingsScreenViewModel(val context: Application) : ViewModel() 
         }
     }
 
+    fun saveNewMarkdownEngine(engine: String) {
+        LoadedSettings.markdownEngine = engine
+        viewModelScope.launch {
+            SyncedSettings.updateAndroid(SyncedSettings.android.copy(markdownEngine = engine))
+        }
+    }
+
     fun saveNewAvatarRadius(radius: Int) {
         LoadedSettings.avatarRadius = radius
         viewModelScope.launch {
@@ -444,6 +451,41 @@ fun AppearanceSettingsScreen(
                         )
                     }
                 }
+
+                ListHeader {
+                    Text("Markdown engine")
+                }
+
+                FlowRow(
+                    modifier = Modifier
+                        .padding(start = 20.dp, end = 20.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    ToggleButton(
+                        checked = LoadedSettings.markdownEngine == "markdown",
+                        onCheckedChange = { viewModel.saveNewMarkdownEngine("markdown") },
+                        shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+                        modifier = Modifier
+                            .semantics { role = Role.RadioButton }
+                            .weight(1f),
+                    ) {
+                        Text("Standard")
+                    }
+                    ToggleButton(
+                        checked = LoadedSettings.markdownEngine == "obsidian",
+                        onCheckedChange = { viewModel.saveNewMarkdownEngine("obsidian") },
+                        shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                        modifier = Modifier
+                            .semantics { role = Role.RadioButton }
+                            .weight(1f),
+                    ) {
+                        Text("Obsidian")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 ListHeader {
                     Text(stringResource(R.string.settings_appearance_avatar_shape))

@@ -67,6 +67,7 @@ import chat.stoat.internals.toStoatWebLinkOrNull
 import chat.stoat.screens.settings.server.copyWithToast
 import chat.stoat.markdown.CHANNEL_MENTION_ELEMENT_TYPE
 import chat.stoat.markdown.CUSTOM_EMOTE_ELEMENT_TYPE
+import chat.stoat.markdown.HIGHLIGHT_ELEMENT_TYPE
 import chat.stoat.markdown.MASS_MENTION_ELEMENT_TYPE
 import chat.stoat.markdown.ROLE_MENTION_ELEMENT_TYPE
 import chat.stoat.markdown.StoatMarkdownFlavour
@@ -75,6 +76,7 @@ import chat.stoat.markdown.USER_MENTION_ELEMENT_TYPE
 import chat.stoat.ui.theme.FragmentMono
 import chat.stoat.ui.theme.isThemeDark
 import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.MarkdownBlockQuote
 import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownHighlightedCodeFence
 import com.mikepenz.markdown.m3.Markdown
@@ -215,7 +217,10 @@ fun ChatMarkdown(
     modifier: Modifier = Modifier,
 ) {
     val processed = remember(content) { easyLineBreaks(content) }
-    val flavour = remember(processed) { StoatMarkdownFlavour(processed) }
+    val isObsidian = LoadedSettings.markdownEngine == "obsidian"
+    val flavour = remember(processed, isObsidian) {
+        StoatMarkdownFlavour(processed, enableObsidian = isObsidian)
+    }
     val markdownState = rememberMarkdownState(
         content = processed,
         flavour = flavour,
@@ -245,6 +250,7 @@ fun ChatMarkdown(
     val density = LocalDensity.current
     val fontSizePx = with(density) { fontSize.toPx() }
     val scope = rememberCoroutineScope()
+    val isObsidian = LoadedSettings.markdownEngine == "obsidian"
     val primaryColor = MaterialTheme.colorScheme.primary
     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
     val onSurfaceArgb = MaterialTheme.colorScheme.onSurface.toArgb()
@@ -299,9 +305,49 @@ fun ChatMarkdown(
             )
         )
     }
-    val annotator = remember(serverId, mentionLinkStyle, surfaceVariantColor) {
+    // Background for ==highlight== spans (Obsidian engine), a soft primary tint.
+    val highlightColor = primaryColor.copy(alpha = 0.3f)
+    val annotator = remember(serverId, mentionLinkStyle, surfaceVariantColor, highlightColor) {
         markdownAnnotator { content, child ->
             when (child.type) {
+                HIGHLIGHT_ELEMENT_TYPE -> {
+                    // The parser collapses a whole text token; split it back into
+                    // plain + ==highlighted== segments here.
+                    val raw = child.getTextInNode(content).toString()
+                    val segments = mutableListOf<Pair<Boolean, String>>()
+                    var i = 0
+                    while (i < raw.length) {
+                        val open = raw.indexOf("==", i)
+                        if (open == -1) {
+                            segments += false to raw.substring(i)
+                            break
+                        }
+                        val close = raw.indexOf("==", open + 2)
+                        if (close == -1) {
+                            segments += false to raw.substring(i)
+                            break
+                        }
+                        val inner = raw.substring(open + 2, close)
+                        if (inner.isNotEmpty() && !inner.contains('=') && !inner.contains('\n')) {
+                            if (open > i) segments += false to raw.substring(i, open)
+                            segments += true to inner
+                            i = close + 2
+                        } else {
+                            // Not a valid ==pair== (embedded '=' or newline) — keep literal.
+                            segments += false to raw.substring(i, close + 2)
+                            i = close + 2
+                        }
+                    }
+                    segments.forEach { segment ->
+                        if (segment.first) {
+                            withStyle(SpanStyle(background = highlightColor)) { append(segment.second) }
+                        } else {
+                            append(segment.second)
+                        }
+                    }
+                    true
+                }
+
                 CUSTOM_EMOTE_ELEMENT_TYPE -> {
                     val ulid = child.getTextInNode(content).toString().removeSurrounding(":")
                     val name = StoatAPI.emojiCache[ulid]?.name ?: ":$ulid:"
@@ -592,6 +638,23 @@ fun ChatMarkdown(
                 image = {},
                 inlineImage = {},
                 table = { StoatTable(it) },
+                blockQuote = {
+                    if (isObsidian) {
+                        val raw = it.node.getTextInNode(it.content).toString()
+                        val callout = parseStoatCallout(raw)
+                        if (callout != null) {
+                            StoatCallout(
+                                callout = callout,
+                                serverId = serverId,
+                                fontSizeMultiplier = fontSizeMultiplier,
+                            )
+                        } else {
+                            MarkdownBlockQuote(it.content, it.node, style = it.typography.quote)
+                        }
+                    } else {
+                        MarkdownBlockQuote(it.content, it.node, style = it.typography.quote)
+                    }
+                },
                 codeBlock = {
                     val rawCode = codeBlockText(it.content, it.node)
                     Box(
