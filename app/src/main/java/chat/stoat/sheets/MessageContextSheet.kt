@@ -61,6 +61,14 @@ fun MessageContextSheet(
     onReportMessage: () -> Unit,
     onCreateThread: (() -> Unit)? = null
 ) {
+    // Must be remembered BEFORE the null early-return below. Deleting a message
+    // races the HTTP response: the server publishes MessageDelete over the socket
+    // first, which drops the message from messageCache and recomposes this sheet
+    // into the spinner branch. A scope remembered after that return would leave
+    // the composition and be cancelled mid-delete, so onHideSheet() never ran and
+    // the sheet spun forever.
+    val coroutineScope = rememberCoroutineScope()
+
     val message = StoatAPI.messageCache[messageId]
     if (message == null) {
         Box(
@@ -76,7 +84,6 @@ fun MessageContextSheet(
     val context = LocalContext.current
     val resources = LocalResources.current
     val clipboardManager = LocalClipboardManager.current
-    val coroutineScope = rememberCoroutineScope()
 
     var showShareSheet by remember { mutableStateOf(false) }
     var showReactSheet by remember { mutableStateOf(false) }
