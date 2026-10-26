@@ -129,6 +129,17 @@ android {
                 "\"${buildproperty("build.flavour_id", "RVX_BUILD_FLAVOUR_ID")}\""
             )
         }
+
+        // Beta channel: same code as release but a distinct application id so it
+        // installs side-by-side with the production client (e.g. for beta testing
+        // unreleased features without clobbering the real app).
+        create("beta") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            matchingFallbacks += listOf("release")
+            resValue("string", "app_name", "Stoat Beta")
+        }
     }
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -271,6 +282,8 @@ dependencies {
 
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.noop)
+    // Beta build type is release-like and needs the chucker no-op stub too.
+    "betaImplementation"(libs.chucker.noop)
 
     implementation(libs.square.logcat)
 
