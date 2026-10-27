@@ -15,7 +15,7 @@ data class UpdateVersion(
 
     companion object {
         private val VersionRegex =
-            Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)(?:-selfhosted\\.(\\d+))?(?:\\+.*)?$")
+            Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)(?:-selfhosted\\.(\\d+))?(?:-beta)?(?:\\+.*)?$")
 
         fun parse(value: String): UpdateVersion? {
             val match = VersionRegex.matchEntire(value.trim()) ?: return null

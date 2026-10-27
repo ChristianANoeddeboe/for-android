@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 
 /**
@@ -32,6 +33,8 @@ import java.io.File
 object AppUpdater {
     private const val LATEST_RELEASE_URL =
         "https://api.github.com/repos/ChristianANoeddeboe/for-android/releases/latest"
+    private const val ALL_RELEASES_URL =
+        "https://api.github.com/repos/ChristianANoeddeboe/for-android/releases?per_page=30"
     private const val UPDATE_DIR = "updates"
     private const val UPDATE_FILE = "stoat-update.apk"
 
@@ -63,8 +66,36 @@ object AppUpdater {
     val isSupported: Boolean
         get() = !BuildConfig.DEBUG
 
-    /** Returns the latest release if it is newer than the installed version, else null. */
+    /** The beta build (applicationId suffix .beta) tracks prereleases; everything else tracks stable. */
+    private val isBetaChannel: Boolean
+        get() = BuildConfig.APPLICATION_ID.endsWith(".beta")
+
+    /** Returns the latest applicable release if it is newer than the installed version, else null. */
     suspend fun checkForUpdate(): AvailableUpdate? {
+        val candidates: List<GitHubRelease> =
+            if (isBetaChannel) fetchReleases() else listOfNotNull(fetchLatestRelease())
+
+        val release = candidates.firstOrNull { it.isApplicable(isBetaChannel) } ?: return null
+        val apk = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return null
+        return AvailableUpdate(
+            version = release.tagName.removePrefix("v"),
+            notes = release.body?.let(::summary),
+            downloadUrl = apk.downloadUrl,
+            size = apk.size,
+        )
+    }
+
+    /**
+     * A release the current channel should offer: not a draft, a prerelease only on the beta
+     * channel, newer than the installed version, and carrying an APK asset.
+     */
+    private fun GitHubRelease.isApplicable(betaChannel: Boolean): Boolean =
+        !draft &&
+                (betaChannel || !prerelease) &&
+                UpdateVersion.isNewer(tagName, BuildConfig.VERSION_NAME) &&
+                assets.any { it.name.endsWith(".apk") }
+
+    private suspend fun fetchLatestRelease(): GitHubRelease? {
         val response = StoatHttp.get(LATEST_RELEASE_URL) {
             header("Accept", "application/vnd.github+json")
         }
@@ -72,17 +103,20 @@ object AppUpdater {
         if (!response.status.isSuccess()) {
             throw Exception("Failed to check for updates: ${response.status}")
         }
+        return StoatJson.decodeFromString(GitHubRelease.serializer(), response.bodyAsText())
+    }
 
-        val release = StoatJson.decodeFromString(GitHubRelease.serializer(), response.bodyAsText())
-        if (release.draft || release.prerelease) return null
-        if (!UpdateVersion.isNewer(release.tagName, BuildConfig.VERSION_NAME)) return null
-
-        val apk = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return null
-        return AvailableUpdate(
-            version = release.tagName.removePrefix("v"),
-            notes = release.body?.let(::summary),
-            downloadUrl = apk.downloadUrl,
-            size = apk.size,
+    /** All releases, newest first (GitHub returns them in creation order). */
+    private suspend fun fetchReleases(): List<GitHubRelease> {
+        val response = StoatHttp.get(ALL_RELEASES_URL) {
+            header("Accept", "application/vnd.github+json")
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("Failed to check for updates: ${response.status}")
+        }
+        return StoatJson.decodeFromString(
+            ListSerializer(GitHubRelease.serializer()),
+            response.bodyAsText(),
         )
     }
 
