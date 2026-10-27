@@ -230,7 +230,7 @@ fun ChannelSettingsWebhooks(navController: NavController, channelId: String) {
 val slowmodeOptions = listOf(
     0L, 5L, 10L, 15L, 30L, 60L, 120L, 300L, 600L, 900L, 1800L, 3600L, 7200L, 21600L
 )
-val autoArchiveOptions = listOf(60, 1440, 4320, 10080)
+val autoArchiveOptions = listOf(0, 60, 1440, 4320, 10080)
 
 @Composable
 fun ChannelSettingsThreads(navController: NavController, channelId: String) {
@@ -316,9 +316,12 @@ fun ChannelSettingsThreads(navController: NavController, channelId: String) {
             )
 
             ListHeader { Text(stringResource(R.string.manage_thread_defaults)) }
+            val autoArchiveNever = stringResource(R.string.manage_auto_archive_never)
             OptionPickerItem(
                 label = stringResource(R.string.manage_auto_archive),
-                options = autoArchiveOptions.map { it to formatSeconds(context, it * 60L) },
+                options = autoArchiveOptions.map {
+                    it to if (it == 0) autoArchiveNever else formatSeconds(context, it * 60L)
+                },
                 selected = autoArchive,
                 onSelect = { autoArchive = it }
             )

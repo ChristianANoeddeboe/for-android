@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="manage_auto_archive">Hide after inactivity</string>
+    <string name="manage_auto_archive_never">Never</string>
     <string name="manage_ban">Ban</string>
     <string name="manage_ban_confirm">Ban %1$s?</string>
     <string name="manage_ban_delete_messages">Delete message history</string>
