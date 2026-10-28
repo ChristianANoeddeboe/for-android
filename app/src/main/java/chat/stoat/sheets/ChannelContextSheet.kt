@@ -2,12 +2,18 @@ package chat.stoat.sheets
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,10 +30,11 @@ import chat.stoat.api.internals.has
 import chat.stoat.callbacks.Action
 import chat.stoat.callbacks.ActionChannel
 import chat.stoat.composables.generic.SheetButton
+import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
 import chat.stoat.internals.Platform
 import chat.stoat.internals.extensions.rememberChannelPermissions
-import androidx.compose.runtime.getValue
+import chat.stoat.screens.chat.views.thread.ThreadOptionsSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -45,41 +52,64 @@ fun ChannelContextSheet(channelId: String, onHideSheet: suspend () -> Unit) {
         return
     }
 
+    if (channel.channelType == ChannelType.Thread) {
+        // Long pressing a thread in the channel list gets the same options as
+        // long pressing its header inside the thread. That is a long list for
+        // moderators, so keep it scrollable instead of clipping the last rows.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            ThreadOptionsSection(
+                threadId = channelId,
+                onHideSheet = onHideSheet,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            ChannelBasicActions(channelId = channelId, onHideSheet = onHideSheet)
+        }
+    } else {
+        val coroutineScope = rememberCoroutineScope()
+        val permissions by rememberChannelPermissions(channelId)
+
+        if (
+            channel.server != null &&
+            (permissions has PermissionBit.ManageChannel || permissions has PermissionBit.ManageRole ||
+                    permissions has PermissionBit.ManagePermissions || permissions has PermissionBit.ManageWebhooks)
+        ) {
+            SheetButton(
+                headlineContent = {
+                    Text(
+                        text = stringResource(id = R.string.settings),
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_settings_24dp),
+                        contentDescription = null
+                    )
+                },
+                onClick = {
+                    coroutineScope.launch {
+                        onHideSheet()
+                    }
+                    coroutineScope.launch {
+                        delay(100)
+                        ActionChannel.send(Action.TopNavigate("settings/channel/$channelId"))
+                    }
+                }
+            )
+        }
+
+        ChannelBasicActions(channelId = channelId, onHideSheet = onHideSheet)
+    }
+}
+
+/**
+ * Copy ID / mark as read, the actions every channel type gets
+ */
+@Composable
+private fun ChannelBasicActions(channelId: String, onHideSheet: suspend () -> Unit) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-
     val coroutineScope = rememberCoroutineScope()
-    val permissions by rememberChannelPermissions(channelId)
-
-    if (
-        channel.server != null &&
-        (permissions has PermissionBit.ManageChannel || permissions has PermissionBit.ManageRole ||
-                permissions has PermissionBit.ManagePermissions || permissions has PermissionBit.ManageWebhooks) &&
-        channel.channelType != ChannelType.Thread
-    ) {
-        SheetButton(
-            headlineContent = {
-                Text(
-                    text = stringResource(id = R.string.settings),
-                )
-            },
-            leadingContent = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_settings_24dp),
-                    contentDescription = null
-                )
-            },
-            onClick = {
-                coroutineScope.launch {
-                    onHideSheet()
-                }
-                coroutineScope.launch {
-                    delay(100)
-                    ActionChannel.send(Action.TopNavigate("settings/channel/$channelId"))
-                }
-            }
-        )
-    }
 
     SheetButton(
         headlineContent = {
@@ -94,9 +124,7 @@ fun ChannelContextSheet(channelId: String, onHideSheet: suspend () -> Unit) {
             )
         },
         onClick = {
-            if (channel.id == null) return@SheetButton
-
-            clipboardManager.setText(AnnotatedString(channel.id!!))
+            clipboardManager.setText(AnnotatedString(channelId))
 
             if (Platform.needsShowClipboardNotification()) {
                 Toast.makeText(
@@ -126,13 +154,11 @@ fun ChannelContextSheet(channelId: String, onHideSheet: suspend () -> Unit) {
         },
         onClick = {
             coroutineScope.launch {
-                channel.lastMessageID?.let {
+                StoatAPI.channelCache[channelId]?.lastMessageID?.let {
                     StoatAPI.unreads.markAsRead(channelId, it, sync = true)
                 }
                 onHideSheet()
             }
         }
     )
-
-
 }

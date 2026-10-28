@@ -250,11 +250,26 @@ fun CreateThreadDialog(channelId: String, messageId: String?, onDismiss: () -> U
 }
 
 /**
- * Actions for a thread or forum post
+ * Actions for a thread or forum post, shown when long pressing the thread header
+ */
+@Composable
+fun ThreadOptionsSheet(threadId: String, onHideSheet: suspend () -> Unit) {
+    ThreadOptionsSection(
+        threadId = threadId,
+        onHideSheet = onHideSheet,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
+}
+
+/**
+ * Thread actions: membership + notifications, rename, tags, open/close, lock, pin, delete
+ *
+ * Shared by [ThreadOptionsSheet] (long press inside the thread) and the channel
+ * drawer's long-press sheet so both offer the same options.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ThreadOptionsSheet(threadId: String, onHideSheet: suspend () -> Unit) {
+fun ThreadOptionsSection(threadId: String, onHideSheet: suspend () -> Unit, modifier: Modifier = Modifier) {
     val thread = StoatAPI.channelCache[threadId] ?: return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -279,7 +294,7 @@ fun ThreadOptionsSheet(threadId: String, onHideSheet: suspend () -> Unit) {
         }
     }
 
-    Column(Modifier.padding(bottom = 16.dp)) {
+    Column(modifier) {
         Text(
             text = thread.name ?: "",
             style = MaterialTheme.typography.titleLarge,
