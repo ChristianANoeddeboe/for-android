@@ -7,6 +7,7 @@ import chat.stoat.api.StoatJson
 import chat.stoat.api.api
 import chat.stoat.api.internals.ULID
 import chat.stoat.core.model.schemas.DataEditDjSettings
+import chat.stoat.core.model.schemas.DataQueueDjUrl
 import chat.stoat.core.model.schemas.DjChannelState
 import chat.stoat.core.model.schemas.DjTrack
 import io.ktor.client.plugins.onUpload
@@ -38,6 +39,14 @@ import kotlinx.serialization.SerializationException
 /** Name of the multipart form field the backend expects for a DJ upload */
 private const val DJ_UPLOAD_FIELD = "file"
 
+/**
+ * A DJ route which failed.
+ *
+ * [errorType] is the backend's error type (`DjYoutubeUnsupported`, `NotInDjChannel`, ...). The UI
+ * maps the known ones to localised text; the raw type is never shown to the user.
+ */
+class DjApiException(val errorType: String) : Exception(errorType)
+
 private fun djError(body: String): Exception {
     val type = try {
         StoatJson.decodeFromString(StoatAPIError.serializer(), body).type
@@ -45,7 +54,8 @@ private fun djError(body: String): Exception {
         null
     }
 
-    return Exception(type ?: "Unknown error")
+    // An unparseable body (proxy error page, HTML, empty) keeps the generic message
+    return if (type == null) Exception("Unknown error") else DjApiException(type)
 }
 
 private inline fun <reified T> decodeDj(body: String): T {
@@ -154,6 +164,38 @@ suspend fun djQueue(
         onUpload { bytesSentTotal, contentLength ->
             contentLength?.let { onProgress(bytesSentTotal, it) }
         }
+    }
+
+    val body = response.bodyAsText()
+    if (!response.status.isSuccess()) throw djError(body)
+    return decodeDj(body)
+}
+
+/**
+ * # Add a YouTube Link to the DJ Queue
+ *
+ * Queues the single video a YouTube link points at: the server downloads the audio with `yt-dlp`
+ * and transcodes it to MP3, so this call takes a few seconds and the same caps apply. Playlist,
+ * channel and search links are rejected; playlist parameters on a video link are ignored.
+ *
+ * Requires an active membership of the channel and the `UploadFiles` permission.
+ *
+ * @param title display title, defaults to the video's own title on the server
+ */
+suspend fun djQueueUrl(
+    channelId: String,
+    url: String,
+    title: String? = null,
+): DjTrack {
+    val response = StoatHttp.post(djPath(channelId, "/queue/url")) {
+        contentType(ContentType.Application.Json)
+        header("Idempotency-Key", ULID.makeNext())
+        setBody(
+            StoatJson.encodeToString(
+                DataQueueDjUrl.serializer(),
+                DataQueueDjUrl(url = url.trim(), title = title?.trim()?.takeIf { it.isNotEmpty() })
+            )
+        )
     }
 
     val body = response.bodyAsText()

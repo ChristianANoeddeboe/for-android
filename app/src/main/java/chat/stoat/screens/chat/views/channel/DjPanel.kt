@@ -15,10 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +40,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import chat.stoat.R
@@ -43,9 +49,11 @@ import chat.stoat.api.StoatAPI
 import chat.stoat.api.dj.Dj
 import chat.stoat.api.dj.DjState
 import chat.stoat.api.dj.neededToSkip
+import chat.stoat.api.routes.channel.DjApiException
 import chat.stoat.api.routes.channel.djJoin
 import chat.stoat.api.routes.channel.djLeave
 import chat.stoat.api.routes.channel.djQueue
+import chat.stoat.api.routes.channel.djQueueUrl
 import chat.stoat.api.routes.channel.djSkip
 import chat.stoat.composables.dj.DjPlayback
 import chat.stoat.core.model.schemas.DjInformation
@@ -77,6 +85,38 @@ private fun djUserName(userId: String): String {
 }
 
 /**
+ * Human text for a failed DJ action.
+ *
+ * The backend answers with a machine error type (`DjYoutubeUnsupported`, `DjQueueFull`, ...) which
+ * must never reach the user verbatim; unknown types fall back to a generic line, keeping the raw
+ * detail in parentheses so a report still says something useful.
+ */
+@Composable
+private fun djErrorMessage(error: Throwable?): String? {
+    if (error == null) return null
+
+    val detail = (error as? DjApiException)?.errorType
+        ?: error.message?.takeIf { it.isNotBlank() }
+
+    return when (detail) {
+        "DjYoutubeUnsupported" -> stringResource(R.string.dj_error_youtube_unsupported)
+        "DjYoutubeFailed" -> stringResource(R.string.dj_error_youtube_failed)
+        "DjYoutubeUnavailable" -> stringResource(R.string.dj_error_youtube_unavailable)
+        "NotInDjChannel" -> stringResource(R.string.dj_error_not_member)
+        "DjQueueFull" -> stringResource(R.string.dj_error_queue_full)
+        "DjUploadLimit" -> stringResource(R.string.dj_error_upload_limit)
+        "DjTrackTooLong" -> stringResource(R.string.dj_error_too_long)
+        "DjStorageFull" -> stringResource(R.string.dj_error_storage_full)
+        "DjTranscodeFailed", "DjUnavailable" ->
+            stringResource(R.string.dj_error_unavailable)
+        "FileTooLarge" -> stringResource(R.string.dj_error_too_large)
+        "FileTooSmall" -> stringResource(R.string.dj_upload_empty)
+        null, "Unknown error" -> stringResource(R.string.dj_error_generic)
+        else -> stringResource(R.string.dj_error_generic_detail, detail)
+    }
+}
+
+/**
  * The DJ panel of a channel: now playing, skip vote, membership and the queue.
  *
  * Shown above the messages on a channel whose `dj` capability is enabled. Users who have not joined
@@ -95,7 +135,7 @@ fun DjPanel(
     val selfId = StoatAPI.selfId
     val joined = state?.isMember(selfId) == true
     var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<Throwable?>(null) }
 
     val current = state?.current
     val position = playback.positionMs.takeIf { it > 0 } ?: (state?.positionMs() ?: 0)
@@ -115,7 +155,7 @@ fun DjPanel(
                 // The backend drops membership when the websocket closes (app backgrounded), so a
                 // failed action re-reads the authoritative state instead of leaving the panel stale
                 runCatching { Dj.refresh(channelId) }
-                error = e.message
+                error = e
             } finally {
                 busy = false
             }
@@ -304,7 +344,7 @@ fun DjPanel(
             }
         }
 
-        val message = error ?: state?.lastUploadError
+        val message = djErrorMessage(error) ?: state?.lastUploadError
         if (message != null) {
             Text(
                 text = message,
@@ -317,8 +357,12 @@ fun DjPanel(
 }
 
 /**
- * Upload control which replaces the message composer on a DJ channel: picks an audio file (`audio` mime type) and
- * queues it. Requires an active membership and the `UploadFiles` permission.
+ * Upload control which replaces the message composer on a DJ channel: picks an audio file (`audio`
+ * mime type) or takes a YouTube link, and queues it. Requires an active membership and the
+ * `UploadFiles` permission.
+ *
+ * The link path is not instant: the server downloads the video with `yt-dlp` and transcodes it, so
+ * the field stays disabled with a spinner until the track is queued.
  */
 @Composable
 fun DjUploadField(
@@ -333,7 +377,33 @@ fun DjUploadField(
     val joined = state?.isMember(StoatAPI.selfId) == true
     var uploading by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var link by remember { mutableStateOf("") }
+    var addingLink by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<Throwable?>(null) }
+
+    val busy = uploading || addingLink
+    val canAdd = joined && canUpload && !busy
+
+    fun queueLink() {
+        val url = link.trim()
+        if (url.isEmpty() || !canAdd) return
+
+        scope.launch {
+            addingLink = true
+            error = null
+
+            try {
+                djQueueUrl(channelId = channelId, url = url)
+                link = ""
+                // The queue is authoritative, so re-read it instead of guessing the position
+                runCatching { Dj.refresh(channelId) }
+            } catch (e: Exception) {
+                error = e
+            } finally {
+                addingLink = false
+            }
+        }
+    }
 
     fun displayName(uri: Uri): String? {
         return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -345,7 +415,7 @@ fun DjUploadField(
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri == null || uploading) return@rememberLauncherForActivityResult
+        if (uri == null || busy) return@rememberLauncherForActivityResult
 
         val name = displayName(uri) ?: "track.m4a"
 
@@ -392,7 +462,7 @@ fun DjUploadField(
                 // The queue is authoritative, so re-read it instead of guessing the position
                 runCatching { Dj.refresh(channelId) }
             } catch (e: Exception) {
-                error = e.message
+                error = e
             } finally {
                 file?.delete()
                 uploading = false
@@ -410,7 +480,7 @@ fun DjUploadField(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(
-                enabled = joined && canUpload && !uploading,
+                enabled = canAdd,
                 onClick = { picker.launch(arrayOf("audio/*")) },
                 modifier = Modifier.testTag("dj_upload")
             ) {
@@ -425,6 +495,7 @@ fun DjUploadField(
                     !joined -> stringResource(R.string.dj_upload_join_first)
                     !canUpload -> stringResource(R.string.dj_upload_no_permission)
                     uploading -> stringResource(R.string.dj_uploading)
+                    addingLink -> stringResource(R.string.dj_link_adding)
                     else -> stringResource(
                         R.string.dj_upload_hint,
                         settings.maxFileMb,
@@ -451,7 +522,75 @@ fun DjUploadField(
             )
         }
 
-        error?.let {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, top = 2.dp)
+        ) {
+            OutlinedTextField(
+                value = link,
+                onValueChange = {
+                    link = it
+                    error = null
+                },
+                enabled = canAdd,
+                singleLine = true,
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.dj_link_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                textStyle = MaterialTheme.typography.bodySmall,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { queueLink() }),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("dj_link_field")
+            )
+
+            Spacer(Modifier.width(4.dp))
+
+            TextButton(
+                enabled = canAdd && link.isNotBlank(),
+                onClick = { queueLink() },
+                modifier = Modifier.testTag("dj_link_add")
+            ) {
+                if (addingLink) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.dj_link_add))
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.dj_link_only_video),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp, top = 2.dp)
+        )
+
+        if (addingLink) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+
+        djErrorMessage(error)?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,

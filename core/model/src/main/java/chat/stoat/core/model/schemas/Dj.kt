@@ -41,6 +41,15 @@ data class DjInformation(
     val enabled: Boolean = true,
 )
 
+/** Body of a link queue request (`POST /channels/{id}/dj/queue/url`) */
+@Serializable
+data class DataQueueDjUrl(
+    /** `https://youtube.com/watch?v=…`, `https://youtu.be/…`, … */
+    val url: String,
+    /** Display title, defaults to the video's own title on the server */
+    val title: String? = null,
+)
+
 /** Partial update of the settings of a DJ channel (`PATCH /channels/{id}/dj/settings`) */
 @Serializable
 data class DataEditDjSettings(
