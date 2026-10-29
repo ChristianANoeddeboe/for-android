@@ -258,7 +258,7 @@ fun DjPanel(
         }
 
         if (joined) {
-            val queue = state?.queue.orEmpty()
+            val queue = state.queue
 
             if (queue.isNotEmpty()) {
                 Text(

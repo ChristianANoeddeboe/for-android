@@ -139,16 +139,15 @@ fun rememberDjPlayback(
         }
     }
 
-    // A failed playback refreshes the snapshot, which carries a freshly signed URL.
+    // A failed playback refreshes the snapshot, which carries a freshly signed URL; the error is
+    // cleared once an item prepares successfully again.
     LaunchedEffect(playback.error) {
-        val error = playback.error ?: return@LaunchedEffect
+        if (playback.error == null) return@LaunchedEffect
 
         if (active) {
             delay(1_000)
             runCatching { Dj.refresh(channelId) }
         }
-
-        playback.error = error
     }
 
     // Follow the server clock: refresh the progress readout and correct drift.
@@ -166,7 +165,7 @@ fun rememberDjPlayback(
             val expected = current.positionMs()
             playback.durationMs = current.durationMs
 
-            if (player.currentMediaItem?.mediaId == current.current?.track?.id) {
+            if (player.currentMediaItem?.mediaId == current.current.track.id) {
                 if (player.isPlaying) {
                     if (abs(player.currentPosition - expected) > MAX_DRIFT_MS) {
                         player.seekTo(expected)
