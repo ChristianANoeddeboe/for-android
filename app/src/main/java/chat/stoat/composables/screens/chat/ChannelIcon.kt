@@ -14,6 +14,16 @@ import chat.stoat.core.model.schemas.ChannelType
 
 @Composable
 fun ChannelIcon(channel: Channel, modifier: Modifier = Modifier) {
+    // A DJ channel is a text channel with a shared music queue
+    if (channel.isDj) {
+        Icon(
+            painter = painterResource(R.drawable.ic_headset_24dp),
+            contentDescription = stringResource(R.string.dj_channel_title),
+            modifier = modifier
+        )
+        return
+    }
+
     ChannelIcon(
         channelType = channel.channelType ?: ChannelType.TextChannel,
         hasVoice = channel.channelType == ChannelType.TextChannel && channel.voice != null,

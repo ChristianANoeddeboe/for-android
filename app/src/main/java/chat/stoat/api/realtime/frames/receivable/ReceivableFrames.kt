@@ -2,6 +2,9 @@ package chat.stoat.api.realtime.frames.receivable
 
 import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelSlowmode
+import chat.stoat.core.model.schemas.DjChannelMembers
+import chat.stoat.core.model.schemas.DjInformation
+import chat.stoat.core.model.schemas.DjTrack
 import chat.stoat.core.model.util.ChannelVoiceState
 import chat.stoat.core.model.schemas.Embed
 import chat.stoat.core.model.schemas.Emoji
@@ -49,6 +52,7 @@ data class ReadyFrame(
     val channels: List<Channel>,
     val emojis: List<Emoji>,
     @SerialName("voice_states") val voiceStates: List<ChannelVoiceState> = listOf(),
+    @SerialName("dj_states") val djStates: List<DjChannelMembers>? = null,
     @SerialName("thread_members") val threadMembers: List<ThreadMember>? = null,
 )
 
@@ -306,4 +310,93 @@ data class UserMoveVoiceChannelFrame(
     val type: String = "UserMoveVoiceChannel",
     val node: String,
     val token: String,
+)
+
+/* DJ channel events */
+
+@Serializable
+data class DjMemberJoinedFrame(
+    val type: String = "DjMemberJoined",
+    val channel: String,
+    val user: String,
+    val count: Int = 0
+)
+
+@Serializable
+data class DjMemberLeftFrame(
+    val type: String = "DjMemberLeft",
+    val channel: String,
+    val user: String,
+    val count: Int = 0
+)
+
+@Serializable
+data class DjTrackQueuedFrame(
+    val type: String = "DjTrackQueued",
+    val channel: String,
+    val track: DjTrack,
+    val position: Int = 0
+)
+
+@Serializable
+data class DjTrackStartedFrame(
+    val type: String = "DjTrackStarted",
+    val channel: String,
+    val track: DjTrack,
+    @SerialName("position_ms") val positionMs: Long = 0,
+    @SerialName("server_time") val serverTime: Long = 0,
+    @SerialName("signed_url") val signedUrl: String = ""
+)
+
+@Serializable
+data class DjNowPlayingFrame(
+    val type: String = "DjNowPlaying",
+    val channel: String,
+    val track: DjTrack,
+    @SerialName("position_ms") val positionMs: Long = 0,
+    @SerialName("server_time") val serverTime: Long = 0,
+    @SerialName("signed_url") val signedUrl: String = ""
+)
+
+@Serializable
+data class DjVoteFrame(
+    val type: String = "DjVote",
+    val channel: String,
+    val votes: Int = 0,
+    val needed: Int = 0,
+    val voters: List<String> = emptyList()
+)
+
+@Serializable
+data class DjSkippedFrame(
+    val type: String = "DjSkipped",
+    val channel: String,
+    val track: DjTrack
+)
+
+@Serializable
+data class DjTrackEndedFrame(
+    val type: String = "DjTrackEnded",
+    val channel: String,
+    val track: DjTrack
+)
+
+@Serializable
+data class DjQueueClearedFrame(
+    val type: String = "DjQueueCleared",
+    val channel: String
+)
+
+@Serializable
+data class DjUploadFailedFrame(
+    val type: String = "DjUploadFailed",
+    val channel: String,
+    val reason: String = ""
+)
+
+@Serializable
+data class DjSettingsUpdateFrame(
+    val type: String = "DjSettingsUpdate",
+    val channel: String,
+    val settings: DjInformation
 )

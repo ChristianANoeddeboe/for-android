@@ -183,6 +183,24 @@ fun ChannelSettingsHome(navController: NavController, channelId: String) {
                         )
                     }
 
+                    if (channel.channelType == ChannelType.TextChannel &&
+                        permissions.hasPermission(PermissionBit.ManageChannel)
+                    ) {
+                        ManageEntry(
+                            title = stringResource(R.string.dj_settings),
+                            icon = R.drawable.ic_headset_24dp,
+                            supporting = channel.dj?.let {
+                                if (it.enabled) {
+                                    stringResource(R.string.dj_settings_enabled)
+                                } else {
+                                    stringResource(R.string.dj_settings_enable)
+                                }
+                            },
+                            onClick = { navController.navigate("settings/channel/${channel.id}/dj") },
+                            modifier = Modifier.testTag("channel_settings_view_dj")
+                        )
+                    }
+
                     if (channel.channelType == ChannelType.ForumChannel && permissions.hasPermission(PermissionBit.ManageChannel)) {
                         ManageEntry(
                             title = stringResource(R.string.manage_forum_tags),

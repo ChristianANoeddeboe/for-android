@@ -131,6 +131,7 @@ import chat.stoat.screens.settings.bots.BotDetailScreen
 import chat.stoat.screens.settings.bots.BotsSettingsScreen
 import chat.stoat.screens.settings.channel.ChannelPermissionOverride
 import chat.stoat.screens.settings.channel.ChannelSettingsForumTags
+import chat.stoat.screens.settings.channel.ChannelSettingsDj
 import chat.stoat.screens.settings.channel.ChannelSettingsThreads
 import chat.stoat.screens.settings.channel.ChannelSettingsWebhooks
 import chat.stoat.screens.settings.server.ServerMemberManage
@@ -851,6 +852,10 @@ fun AppEntrypoint(
                     composable("settings/channel/{channelId}/tags") { backStackEntry ->
                         val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
                         ChannelSettingsForumTags(navController, channelId)
+                    }
+                    composable("settings/channel/{channelId}/dj") { backStackEntry ->
+                        val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
+                        ChannelSettingsDj(navController, channelId)
                     }
                     composable("settings/bots") { BotsSettingsScreen(navController) }
                     composable("settings/bots/{botId}") { backStackEntry ->

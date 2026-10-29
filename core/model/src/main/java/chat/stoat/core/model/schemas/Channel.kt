@@ -78,6 +78,8 @@ data class Channel(
     val defaultPermissions: PermissionDescription? = null,
     val nsfw: Boolean? = null,
     val voice: VoiceInformation? = null,
+    // DJ capability on a text channel (channel_type stays TextChannel)
+    val dj: DjInformation? = null,
     val slowmode: Long? = null,
 
     // Text and forum channels
@@ -124,6 +126,10 @@ data class Channel(
     val isForum: Boolean
         get() = channelType == ChannelType.ForumChannel
 
+    /** Whether this channel currently behaves as a DJ channel (capability present and enabled) */
+    val isDj: Boolean
+        get() = dj?.enabled == true
+
 
     fun mergeWithPartial(partial: Channel): Channel {
         return Channel(
@@ -143,6 +149,7 @@ data class Channel(
             defaultPermissions = partial.defaultPermissions ?: defaultPermissions,
             nsfw = partial.nsfw ?: nsfw,
             voice = partial.voice ?: voice,
+            dj = partial.dj ?: dj,
             slowmode = partial.slowmode ?: slowmode,
             defaultAutoArchiveMinutes = partial.defaultAutoArchiveMinutes
                 ?: defaultAutoArchiveMinutes,

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import chat.stoat.BuildConfig
 import chat.stoat.StoatApplication
 import chat.stoat.api.StoatAPI.initialize
+import chat.stoat.api.dj.Dj
 import chat.stoat.api.internals.ActiveSlowmode
 import chat.stoat.api.internals.Members
 import chat.stoat.api.realtime.DisconnectionState
@@ -333,6 +334,7 @@ object StoatAPI {
 
         members.clear()
         unreads.clear()
+        Dj.reset()
 
         socketWanted = false
         socketCoroutine?.cancel()

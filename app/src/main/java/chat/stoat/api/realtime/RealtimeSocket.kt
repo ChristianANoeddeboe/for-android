@@ -7,6 +7,7 @@ import chat.stoat.StoatApplication
 import chat.stoat.api.StoatAPI
 import chat.stoat.api.StoatHttp
 import chat.stoat.api.StoatJson
+import chat.stoat.api.dj.Dj
 import chat.stoat.api.internals.ActiveSlowmode
 import chat.stoat.api.realtime.frames.receivable.AnyFrame
 import chat.stoat.api.realtime.frames.receivable.BulkFrame
@@ -15,6 +16,17 @@ import chat.stoat.api.realtime.frames.receivable.ChannelDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.ChannelStartTypingFrame
 import chat.stoat.api.realtime.frames.receivable.ChannelStopTypingFrame
 import chat.stoat.api.realtime.frames.receivable.ChannelUpdateFrame
+import chat.stoat.api.realtime.frames.receivable.DjMemberJoinedFrame
+import chat.stoat.api.realtime.frames.receivable.DjMemberLeftFrame
+import chat.stoat.api.realtime.frames.receivable.DjNowPlayingFrame
+import chat.stoat.api.realtime.frames.receivable.DjQueueClearedFrame
+import chat.stoat.api.realtime.frames.receivable.DjSettingsUpdateFrame
+import chat.stoat.api.realtime.frames.receivable.DjSkippedFrame
+import chat.stoat.api.realtime.frames.receivable.DjTrackEndedFrame
+import chat.stoat.api.realtime.frames.receivable.DjTrackQueuedFrame
+import chat.stoat.api.realtime.frames.receivable.DjTrackStartedFrame
+import chat.stoat.api.realtime.frames.receivable.DjUploadFailedFrame
+import chat.stoat.api.realtime.frames.receivable.DjVoteFrame
 import chat.stoat.api.realtime.frames.receivable.MessageAppendFrame
 import chat.stoat.api.realtime.frames.receivable.MessageDeleteFrame
 import chat.stoat.api.realtime.frames.receivable.MessageFrame
@@ -298,6 +310,11 @@ object RealtimeSocket {
 
                 logcat { "New voice states: ${voiceStateMap}" }
 
+                readyFrame.djStates?.let { djStates ->
+                    logcat { "Adding ${djStates.size} DJ channel memberships." }
+                    djStates.forEach { Dj.setMembership(it.id, it.members) }
+                }
+
                 Log.d("RealtimeSocket", "Registering push notification channels.")
                 channelRegistrator.register()
 
@@ -495,6 +512,107 @@ object RealtimeSocket {
                     oldMessage.copy(reactions = reactions)
 
                 StoatAPI.wsFrameChannel.emit(messageUnreactFrame)
+            }
+
+            "DjMemberJoined" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjMemberJoinedFrame.serializer(), rawFrame
+                )
+                logcat { "DJ member joined ${frame.channel}: ${frame.user} (${frame.count})." }
+                Dj.memberJoined(frame.channel, frame.user)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjMemberLeft" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjMemberLeftFrame.serializer(), rawFrame
+                )
+                logcat { "DJ member left ${frame.channel}: ${frame.user} (${frame.count})." }
+                Dj.memberLeft(frame.channel, frame.user)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjTrackQueued" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjTrackQueuedFrame.serializer(), rawFrame
+                )
+                logcat { "DJ track queued in ${frame.channel}: ${frame.track.title} at ${frame.position}." }
+                Dj.trackQueued(frame.channel, frame.track, frame.position)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjTrackStarted" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjTrackStartedFrame.serializer(), rawFrame
+                )
+                logcat {
+                    "DJ track started in ${frame.channel}: ${frame.track.title} at ${frame.positionMs}ms."
+                }
+                Dj.trackStarted(
+                    frame.channel,
+                    frame.track,
+                    frame.positionMs,
+                    frame.serverTime,
+                    frame.signedUrl
+                )
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjNowPlaying" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjNowPlayingFrame.serializer(), rawFrame
+                )
+                Dj.nowPlaying(
+                    frame.channel,
+                    frame.track,
+                    frame.positionMs,
+                    frame.serverTime,
+                    frame.signedUrl
+                )
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjVote" -> {
+                val frame = StoatJson.decodeFromString(DjVoteFrame.serializer(), rawFrame)
+                Dj.vote(frame.channel, frame.votes, frame.needed, frame.voters)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjSkipped" -> {
+                val frame = StoatJson.decodeFromString(DjSkippedFrame.serializer(), rawFrame)
+                logcat { "DJ track skipped in ${frame.channel}: ${frame.track.title}." }
+                Dj.trackEnded(frame.channel, frame.track.id)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjTrackEnded" -> {
+                val frame = StoatJson.decodeFromString(DjTrackEndedFrame.serializer(), rawFrame)
+                logcat { "DJ track ended in ${frame.channel}: ${frame.track.title}." }
+                Dj.trackEnded(frame.channel, frame.track.id)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjQueueCleared" -> {
+                val frame = StoatJson.decodeFromString(DjQueueClearedFrame.serializer(), rawFrame)
+                logcat { "DJ queue cleared in ${frame.channel}." }
+                Dj.queueCleared(frame.channel)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjUploadFailed" -> {
+                val frame = StoatJson.decodeFromString(DjUploadFailedFrame.serializer(), rawFrame)
+                logcat { "DJ upload failed in ${frame.channel}: ${frame.reason}" }
+                Dj.uploadFailed(frame.channel, frame.reason)
+                StoatAPI.wsFrameChannel.emit(frame)
+            }
+
+            "DjSettingsUpdate" -> {
+                val frame = StoatJson.decodeFromString(
+                    DjSettingsUpdateFrame.serializer(), rawFrame
+                )
+                logcat { "DJ settings updated for ${frame.channel}: ${frame.settings}" }
+                Dj.settingsUpdated(frame.channel, frame.settings)
+                StoatAPI.wsFrameChannel.emit(frame)
             }
 
             "UserUpdate" -> {

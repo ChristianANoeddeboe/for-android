@@ -1070,4 +1070,39 @@
     <string name="changelog_header">What\'s new</string>
     <string name="changelog_load_error">There was an error loading the changelog.</string>
     <string name="changelog_retry">Retry</string>
+    <!-- DJ channels -->
+    <string name="dj_channel_title">DJ</string>
+    <string name="dj_listeners">%1$d listening</string>
+    <string name="dj_listeners_limited">%1$d / %2$d listening</string>
+    <string name="dj_join">Join</string>
+    <string name="dj_leave">Leave</string>
+    <string name="dj_nothing_playing">Nothing is playing right now.</string>
+    <string name="dj_untitled">Untitled track</string>
+    <string name="dj_uploaded_by">Added by %1$s</string>
+    <string name="dj_skip_votes">Skip %1$d/%2$d</string>
+    <string name="dj_up_next">Up next</string>
+    <string name="dj_queue_more">+%1$d more in the queue</string>
+    <string name="dj_upload">Add a track</string>
+    <string name="dj_uploading">Uploading track…</string>
+    <string name="dj_upload_join_first">Join the DJ channel to add tracks.</string>
+    <string name="dj_upload_no_permission">You cannot add tracks to this channel.</string>
+    <string name="dj_upload_hint">Add an audio file (max %1$d MB, %2$d min)</string>
+    <string name="dj_upload_empty">That file is empty.</string>
+    <string name="dj_upload_too_large">That file is larger than the %1$d MB limit.</string>
+    <string name="dj_settings">DJ</string>
+    <string name="dj_settings_enabled">Enable DJ</string>
+    <string name="dj_settings_enabled_desc">Members can join and share a music queue in this channel. Messages are disabled while the DJ is on.</string>
+    <string name="dj_settings_enable">Enable DJ channel</string>
+    <string name="dj_settings_enable_desc">Turns this text channel into a DJ channel. You can turn it off again later.</string>
+    <string name="dj_settings_section_playback">Playback</string>
+    <string name="dj_settings_skip_threshold">Skip threshold</string>
+    <string name="dj_settings_skip_threshold_desc">Fraction of listeners which must vote to skip a track (%1$d%%).</string>
+    <string name="dj_settings_limits">Upload limits</string>
+    <string name="dj_settings_max_file_mb">Max file size (MB)</string>
+    <string name="dj_settings_max_track_seconds">Max track length (seconds)</string>
+    <string name="dj_settings_max_tracks">Max queued tracks</string>
+    <string name="dj_settings_max_users">Max listeners (0 = unlimited)</string>
+    <string name="dj_settings_save">Save</string>
+    <string name="dj_settings_unsupported">DJ can only be enabled on a text channel.</string>
+    <string name="dj_settings_channel_type">This channel is a %1$s channel.</string>
 </resources>

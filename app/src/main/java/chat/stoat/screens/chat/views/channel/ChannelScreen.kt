@@ -146,7 +146,9 @@ import chat.stoat.callbacks.Action
 import chat.stoat.callbacks.ActionChannel
 import chat.stoat.composables.chat.DateDivider
 import chat.stoat.composables.chat.Message
+import chat.stoat.api.dj.Dj
 import chat.stoat.composables.chat.MessageField
+import chat.stoat.composables.dj.rememberDjPlayback
 import chat.stoat.composables.chat.SystemMessage
 import chat.stoat.composables.emoji.EmojiPicker
 import chat.stoat.composables.generic.GroupIcon
@@ -282,6 +284,23 @@ fun ChannelScreen(
     LaunchedEffect(channelId) {
         viewModel.switchChannel(channelId)
     }
+    // <editor-fold desc="DJ channel">
+    val djSettings = StoatAPI.channelCache[channelId]?.dj
+    val djEnabled = djSettings?.enabled == true
+    val djState = if (djEnabled) Dj.channels[channelId] else null
+    val djJoined = djState?.isMember(StoatAPI.selfId) == true
+
+    LaunchedEffect(channelId, djEnabled) {
+        if (!djEnabled) return@LaunchedEffect
+
+        // Members already get TrackStarted/NowPlaying heartbeats, everybody else needs the
+        // read-only snapshot to see the queue
+        runCatching { Dj.refresh(channelId) }
+    }
+
+    // Foreground-only: the player is released when this screen leaves composition
+    val djPlayback = rememberDjPlayback(channelId, djState, djEnabled && djJoined)
+    // </editor-fold>
     LaunchedEffect(channelId, requestedMessageId) {
         val messageId = requestedMessageId ?: return@LaunchedEffect
         snapshotFlow { viewModel.channelId }.first { it == channelId }
@@ -984,6 +1003,16 @@ fun ChannelScreen(
                         modifier = Modifier
                             .padding(pv)
                     ) {
+                        if (djEnabled && djSettings != null) {
+                            DjPanel(
+                                channelId = channelId,
+                                state = djState,
+                                playback = djPlayback,
+                                settings = djSettings,
+                                canJoin = channelPermissions has PermissionBit.Connect
+                            )
+                        }
+
                         Box(
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.BottomCenter
@@ -1456,6 +1485,15 @@ fun ChannelScreen(
                                             }
                                         }
 
+                                        if (djEnabled && djSettings != null) {
+                                            // A DJ channel is read-only for messages
+                                            DjUploadField(
+                                                channelId = channelId,
+                                                state = djState,
+                                                settings = djSettings,
+                                                canUpload = channelPermissions has PermissionBit.UploadFiles
+                                            )
+                                        } else
                                         MessageField(
                                             initialValue = viewModel.initialTextFieldValue,
                                             initialValueDirtyMarker = viewModel.initialTextFieldValueDirtyMarker,
