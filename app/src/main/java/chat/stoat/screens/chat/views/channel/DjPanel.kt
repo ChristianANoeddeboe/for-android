@@ -42,6 +42,7 @@ import chat.stoat.R
 import chat.stoat.api.StoatAPI
 import chat.stoat.api.dj.Dj
 import chat.stoat.api.dj.DjState
+import chat.stoat.api.dj.neededToSkip
 import chat.stoat.api.routes.channel.djJoin
 import chat.stoat.api.routes.channel.djLeave
 import chat.stoat.api.routes.channel.djQueue
@@ -111,6 +112,9 @@ fun DjPanel(
             try {
                 action()
             } catch (e: Exception) {
+                // The backend drops membership when the websocket closes (app backgrounded), so a
+                // failed action re-reads the authoritative state instead of leaving the panel stale
+                runCatching { Dj.refresh(channelId) }
                 error = e.message
             } finally {
                 busy = false
@@ -228,7 +232,23 @@ fun DjPanel(
                 if (joined) {
                     TextButton(
                         enabled = !busy,
-                        onClick = { act { Dj.apply(djSkip(channelId)) } },
+                        onClick = {
+                            act {
+                                // The snapshot which a vote returns can predate the skip event, so
+                                // only the tally is taken from it and playback stays event-driven
+                                val state = djSkip(channelId)
+                                Dj.setMembership(channelId, state.members)
+                                Dj.vote(
+                                    channelId = channelId,
+                                    votes = state.votes,
+                                    needed = neededToSkip(
+                                        state.members.size,
+                                        state.settings.skipThreshold
+                                    ),
+                                    voters = state.voters
+                                )
+                            }
+                        },
                         modifier = Modifier.testTag("dj_skip")
                     ) {
                         Text(stringResource(R.string.dj_skip_votes, votes, needed))
@@ -343,6 +363,11 @@ fun DjUploadField(
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
+
+                // Opening the system picker backgrounds the app, which closes the websocket and
+                // makes the backend drop the DJ membership on socket close. Joining again is
+                // idempotent and re-adds us before the upload is authorised.
+                Dj.apply(djJoin(channelId))
 
                 val maxBytes = settings.maxFileMb.toLong() * 1024L * 1024L
                 if (file.length() <= 0L) {

@@ -310,10 +310,11 @@ object RealtimeSocket {
 
                 logcat { "New voice states: ${voiceStateMap}" }
 
-                readyFrame.djStates?.let { djStates ->
-                    logcat { "Adding ${djStates.size} DJ channel memberships." }
-                    djStates.forEach { Dj.setMembership(it.id, it.members) }
-                }
+                val djStates = readyFrame.djStates.orEmpty()
+                logcat { "Adding ${djStates.size} DJ channel memberships." }
+                djStates.forEach { Dj.setMembership(it.id, it.members) }
+                // Membership is dropped server-side when a socket closes, so Ready is the truth
+                Dj.reconcileMembership(djStates.map { it.id }.toSet())
 
                 Log.d("RealtimeSocket", "Registering push notification channels.")
                 channelRegistrator.register()

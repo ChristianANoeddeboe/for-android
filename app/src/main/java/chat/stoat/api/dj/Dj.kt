@@ -138,6 +138,33 @@ object Dj {
         }
     }
 
+    /**
+     * Reconcile our own membership with `Ready.dj_states`.
+     *
+     * The backend removes a member when their websocket closes, so after a reconnect the server is
+     * authoritative: channels which are missing from `dj_states` no longer have us as a member.
+     */
+    fun reconcileMembership(joinedChannelIds: Set<String>) {
+        val selfId = StoatAPI.selfId ?: return
+
+        for (channelId in channels.keys.toList()) {
+            if (channelId in joinedChannelIds) continue
+
+            update(channelId) { state ->
+                if (!state.members.contains(selfId)) {
+                    state
+                } else {
+                    val members = state.members - selfId
+                    state.copy(
+                        members = members,
+                        voters = state.voters - selfId,
+                        needed = neededToSkip(members.size, state.settings.skipThreshold)
+                    )
+                }
+            }
+        }
+    }
+
     fun memberJoined(channelId: String, userId: String) {
         update(channelId) { state ->
             if (state.members.contains(userId)) {
