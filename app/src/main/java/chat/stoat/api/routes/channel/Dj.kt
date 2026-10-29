@@ -24,6 +24,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import java.io.File
@@ -47,15 +48,22 @@ private const val DJ_UPLOAD_FIELD = "file"
  */
 class DjApiException(val errorType: String) : Exception(errorType)
 
-private fun djError(body: String): Exception {
+private fun djError(body: String, status: HttpStatusCode? = null): Exception {
     val type = try {
         StoatJson.decodeFromString(StoatAPIError.serializer(), body).type
     } catch (e: SerializationException) {
         null
     }
 
-    // An unparseable body (proxy error page, HTML, empty) keeps the generic message
-    return if (type == null) Exception("Unknown error") else DjApiException(type)
+    if (type != null) return DjApiException(type)
+
+    // An unparseable body is still meaningful with the status: the auth layer answers 401/403 with
+    // an HTML page, which the panel would otherwise report as a bare "try again"
+    return when (status?.value) {
+        401 -> DjApiException("Unauthorized")
+        403 -> DjApiException("Forbidden")
+        else -> Exception("Unknown error")
+    }
 }
 
 private inline fun <reified T> decodeDj(body: String): T {
@@ -68,7 +76,7 @@ private inline fun <reified T> decodeDj(body: String): T {
 
 private suspend fun HttpResponse.djState(): DjChannelState {
     val body = bodyAsText()
-    if (!status.isSuccess()) throw djError(body)
+    if (!status.isSuccess()) throw djError(body, status)
     return decodeDj(body)
 }
 
@@ -92,7 +100,7 @@ suspend fun djJoin(channelId: String): DjChannelState {
 /** # Leave DJ Channel: idempotent */
 suspend fun djLeave(channelId: String) {
     val response = StoatHttp.post(djPath(channelId, "/leave"))
-    if (!response.status.isSuccess()) throw djError(response.bodyAsText())
+    if (!response.status.isSuccess()) throw djError(response.bodyAsText(), response.status)
 }
 
 /** # Fetch DJ Channel State: read-only for users which have not joined */
@@ -167,7 +175,7 @@ suspend fun djQueue(
     }
 
     val body = response.bodyAsText()
-    if (!response.status.isSuccess()) throw djError(body)
+    if (!response.status.isSuccess()) throw djError(body, response.status)
     return decodeDj(body)
 }
 
@@ -199,6 +207,6 @@ suspend fun djQueueUrl(
     }
 
     val body = response.bodyAsText()
-    if (!response.status.isSuccess()) throw djError(body)
+    if (!response.status.isSuccess()) throw djError(body, response.status)
     return decodeDj(body)
 }

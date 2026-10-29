@@ -1103,6 +1103,8 @@
     <string name="dj_error_too_large">That track is larger than this channel allows.</string>
     <string name="dj_error_storage_full">The channel has no storage left.</string>
     <string name="dj_error_unavailable">DJ uploads are temporarily unavailable.</string>
+    <string name="dj_error_unauthorized">Your session expired. Sign in again.</string>
+    <string name="dj_error_forbidden">You cannot add tracks to this channel.</string>
     <string name="dj_error_generic">Could not add that track. Try again.</string>
     <string name="dj_error_generic_detail">Could not add that track (%1$s).</string>
     <string name="dj_settings">DJ</string>

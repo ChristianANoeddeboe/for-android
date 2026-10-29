@@ -111,6 +111,8 @@ private fun djErrorMessage(error: Throwable?): String? {
             stringResource(R.string.dj_error_unavailable)
         "FileTooLarge" -> stringResource(R.string.dj_error_too_large)
         "FileTooSmall" -> stringResource(R.string.dj_upload_empty)
+        "Unauthorized" -> stringResource(R.string.dj_error_unauthorized)
+        "Forbidden" -> stringResource(R.string.dj_error_forbidden)
         null, "Unknown error" -> stringResource(R.string.dj_error_generic)
         else -> stringResource(R.string.dj_error_generic_detail, detail)
     }
