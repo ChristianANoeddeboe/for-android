@@ -201,7 +201,7 @@ fun ChannelSideDrawer(
     var channelContextSheetTarget by remember { mutableStateOf<String?>(null) }
 
     if (channelContextSheetTarget != null) {
-        val channelContextSheetState = rememberModalBottomSheetState()
+        val channelContextSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
         ModalBottomSheet(
             sheetState = channelContextSheetState,

@@ -2,12 +2,11 @@ package chat.stoat.sheets
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,7 +29,6 @@ import chat.stoat.api.internals.has
 import chat.stoat.callbacks.Action
 import chat.stoat.callbacks.ActionChannel
 import chat.stoat.composables.generic.SheetButton
-import chat.stoat.core.model.schemas.Channel
 import chat.stoat.core.model.schemas.ChannelType
 import chat.stoat.internals.Platform
 import chat.stoat.internals.extensions.rememberChannelPermissions
@@ -54,16 +52,27 @@ fun ChannelContextSheet(channelId: String, onHideSheet: suspend () -> Unit) {
 
     if (channel.channelType == ChannelType.Thread) {
         // Long pressing a thread in the channel list gets the same options as
-        // long pressing its header inside the thread. That is a long list for
-        // moderators, so keep it scrollable instead of clipping the last rows.
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            ThreadOptionsSection(
-                threadId = channelId,
-                onHideSheet = onHideSheet,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            ChannelBasicActions(channelId = channelId, onHideSheet = onHideSheet)
+        // long pressing its header inside the thread. That is a tall list for
+        // moderators, so it has to really scroll (a plain Column only grew past
+        // the sheet and stayed unreachable).
+        LazyColumn(
+            // Bounded height so the list scrolls inside the sheet instead of
+            // growing past it (rows outside the sheet are not tappable)
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+        ) {
+            item {
+                ThreadOptionsSection(
+                    threadId = channelId,
+                    onHideSheet = onHideSheet,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+            item {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                ChannelBasicActions(channelId = channelId, onHideSheet = onHideSheet)
+            }
         }
     } else {
         val coroutineScope = rememberCoroutineScope()
