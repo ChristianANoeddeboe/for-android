@@ -43,9 +43,12 @@ import chat.stoat.api.StoatAPI
 import chat.stoat.api.internals.BrushCompat
 import chat.stoat.api.internals.ULID
 import chat.stoat.api.internals.solidColor
+import chat.stoat.api.routes.bots.fetchBot
 import chat.stoat.api.routes.user.fetchUserProfile
 import chat.stoat.api.settings.Experiments
 import chat.stoat.api.settings.FeatureFlags
+import chat.stoat.composables.chat.BotUsageContent
+import chat.stoat.composables.chat.BotUsagePreview
 import chat.stoat.composables.chat.RoleListEntry
 import chat.stoat.composables.chat.UserBadgeList
 import chat.stoat.composables.chat.UserBadgeRow
@@ -55,6 +58,7 @@ import chat.stoat.composables.markdown.prose.ChatMarkdown
 import chat.stoat.composables.screens.settings.RawUserOverview
 import chat.stoat.composables.screens.settings.UserButtons
 import chat.stoat.composables.sheets.SheetTile
+import chat.stoat.core.model.schemas.BotUsage
 import chat.stoat.core.model.schemas.Profile
 import kotlinx.datetime.Instant
 
@@ -73,6 +77,7 @@ fun UserInfoSheet(
 
     var profile by remember { mutableStateOf<Profile?>(null) }
     var profileNotFound by remember { mutableStateOf(false) }
+    var botUsage by remember(userId) { mutableStateOf<BotUsage?>(null) }
 
     LaunchedEffect(user) {
         try {
@@ -82,6 +87,17 @@ fun UserInfoSheet(
                 profileNotFound = true
             }
             e.printStackTrace()
+        }
+    }
+
+    // Bots publish their provider usage limits on their own bot object; only the
+    // owner may read it, so anything else quietly shows nothing.
+    LaunchedEffect(userId) {
+        if (StoatAPI.userCache[userId]?.bot == null) return@LaunchedEffect
+        try {
+            botUsage = fetchBot(userId).bot.usage?.takeUnless { it.isEmpty }
+        } catch (e: Exception) {
+            // Not the owner, or the bot publishes no limits.
         }
     }
 
@@ -394,6 +410,21 @@ fun UserInfoSheet(
                             }
                         )
                     }
+                }
+            }
+        }
+
+        botUsage?.let { usage ->
+            item(key = "bot-usage", span = StaggeredGridItemSpan.FullLine) {
+                SheetTile(
+                    header = {
+                        Text(stringResource(R.string.user_info_sheet_category_limits))
+                    },
+                    contentPreview = {
+                        BotUsagePreview(usage)
+                    }
+                ) {
+                    BotUsageContent(usage)
                 }
             }
         }

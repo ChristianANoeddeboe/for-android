@@ -5,6 +5,7 @@ import chat.stoat.api.StoatHttp
 import chat.stoat.api.StoatJson
 import chat.stoat.api.api
 import chat.stoat.api.routes.server.bodyOrThrowApi
+import chat.stoat.core.model.schemas.BotUsage
 import chat.stoat.core.model.schemas.User
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -28,7 +29,8 @@ data class OwnedBot(
     val analytics: Boolean = false,
     val discoverable: Boolean = false,
     @SerialName("interactions_url")
-    val interactionsUrl: String? = null
+    val interactionsUrl: String? = null,
+    val usage: BotUsage? = null
 )
 
 @Serializable

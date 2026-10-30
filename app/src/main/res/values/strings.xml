@@ -579,6 +579,12 @@
     <string name="user_info_sheet_category_badges">Badges</string>
     <string name="user_info_sheet_category_owner">Owner</string>
     <string name="user_info_sheet_owner_not_found">Could not fetch owner information</string>
+    <string name="user_info_sheet_category_limits">Limits</string>
+    <string name="bot_usage_unavailable">unavailable</string>
+    <string name="bot_usage_resets">resets %1$s</string>
+    <string name="bot_usage_updated">updated %1$s</string>
+    <string name="bot_usage_this_bot">This bot</string>
+    <string name="bot_usage_consumption">%1$s: %2$d calls · %3$s tok</string>
     <string name="user_info_sheet_add_friend">Add Friend</string>
     <string name="user_info_sheet_send_message">Send Message</string>
     <string name="user_info_sheet_remove_friend">Remove Friend</string>
