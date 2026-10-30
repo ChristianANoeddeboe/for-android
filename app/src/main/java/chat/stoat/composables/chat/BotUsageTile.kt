@@ -122,7 +122,7 @@ fun BotUsageContent(usage: BotUsage) {
 private fun LimitRow(window: BotUsageWindow) {
     val used = window.usedPercent
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -145,6 +145,9 @@ private fun LimitRow(window: BotUsageWindow) {
             LinearProgressIndicator(
                 progress = { (used.coerceIn(0, 100)) / 100f },
                 color = usageColor(used),
+                // The Material3 stop indicator renders as a stray dot past the
+                // track end at this width; the percentage label carries it.
+                drawStopIndicator = {},
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -197,11 +200,15 @@ private fun relative(iso: String?): String {
 
     return try {
         val millis = Instant.parse(iso).toEpochMilliseconds()
-        DateUtils.getRelativeTimeSpanString(
+        val raw = DateUtils.getRelativeTimeSpanString(
             millis,
             System.currentTimeMillis(),
             DateUtils.MINUTE_IN_MILLIS
         ).toString()
+
+        // DateUtils capitalises "In 2 hours"; only that prefix is lowered so an
+        // absolute date keeps its month capitalised ("Nov 11, 2026").
+        if (raw.startsWith("In ")) "in " + raw.removePrefix("In ") else raw
     } catch (e: Exception) {
         iso
     }
