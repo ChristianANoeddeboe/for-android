@@ -8,6 +8,7 @@ import chat.stoat.api.instance.InstanceManager
 import chat.stoat.api.realtime.RealtimeLifecycle
 import chat.stoat.di.appModule
 import chat.stoat.di.viewModelModule
+import chat.stoat.persistence.CollapsedThreadLists
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.crossfade
@@ -28,6 +29,7 @@ class StoatApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         InstanceManager.load(this)
+        CollapsedThreadLists.hydrate()
         AndroidLogcatLogger.installOnDebuggableApp(this, minPriority = LogPriority.VERBOSE)
 
         if (BuildConfig.DEBUG) {

@@ -39,7 +39,18 @@ object ChannelUtils {
         return channel.recipients?.firstOrNull { u -> u != StoatAPI.selfId }
     }
 
-    fun categoriseServerFlat(server: Server): List<CategorisedChannelList> {
+    /**
+     * Flat list of categories, channels and (joined) threads for a server
+     *
+     * @param collapsedThreads Channels whose nested thread list is collapsed
+     * @param activeChannelId Currently open channel; its own thread stays listed
+     *   even when collapsed so the drawer keeps its context
+     */
+    fun categoriseServerFlat(
+        server: Server,
+        collapsedThreads: Set<String> = emptySet(),
+        activeChannelId: String? = null
+    ): List<CategorisedChannelList> {
         val output = mutableListOf<CategorisedChannelList>()
 
         val uncategorised =
@@ -51,7 +62,9 @@ object ChannelUtils {
                 } ?: true
             }
                 ?.mapNotNull { StoatAPI.channelCache[it] } ?: emptyList()
-        uncategorised.forEach { addWithThreads(output, it) }
+        uncategorised.forEach {
+            addWithThreads(output, it, collapsedThreads, activeChannelId)
+        }
 
         val categories =
             server.categories?.map { CategorisedChannelList.Category(it) } ?: emptyList()
@@ -59,7 +72,9 @@ object ChannelUtils {
             output.add(it)
             it.category.channels
                 ?.mapNotNull { c -> StoatAPI.channelCache[c] }
-                ?.forEach { c -> addWithThreads(output, c) }
+                ?.forEach { c ->
+                    addWithThreads(output, c, collapsedThreads, activeChannelId)
+                }
         }
 
         return output
@@ -77,10 +92,22 @@ object ChannelUtils {
             .sortedByDescending { it.lastMessageID ?: it.id }
     }
 
-    private fun addWithThreads(output: MutableList<CategorisedChannelList>, channel: Channel) {
+    private fun addWithThreads(
+        output: MutableList<CategorisedChannelList>,
+        channel: Channel,
+        collapsedThreads: Set<String>,
+        activeChannelId: String?
+    ) {
         output.add(CategorisedChannelList.Channel(channel))
         channel.id?.let { id ->
-            joinedThreads(id).forEach { output.add(CategorisedChannelList.Thread(it)) }
+            val threads = joinedThreads(id)
+            val visible = if (id in collapsedThreads) {
+                threads.filter { it.id == activeChannelId }
+            } else {
+                threads
+            }
+
+            visible.forEach { output.add(CategorisedChannelList.Thread(it)) }
         }
     }
 }

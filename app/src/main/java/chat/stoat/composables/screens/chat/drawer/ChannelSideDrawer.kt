@@ -38,6 +38,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -102,6 +105,7 @@ import chat.stoat.core.model.schemas.ServerFlags
 import chat.stoat.core.model.schemas.User
 import chat.stoat.core.model.schemas.has
 import chat.stoat.core.model.util.UserVoiceState
+import chat.stoat.persistence.CollapsedThreadLists
 import chat.stoat.screens.chat.ChatRouterDestination
 import chat.stoat.screens.chat.LocalIsConnected
 import chat.stoat.sheets.ChannelContextSheet
@@ -133,8 +137,13 @@ fun ChannelSideDrawer(
     modifier: Modifier = Modifier
 ) {
     val server = StoatAPI.serverCache[currentServer]
+    val collapsedThreadLists = CollapsedThreadLists.collapsed
     val categorisedChannels = server?.let {
-        ChannelUtils.categoriseServerFlat(it)
+        ChannelUtils.categoriseServerFlat(
+            it,
+            collapsedThreadLists,
+            (currentDestination as? ChatRouterDestination.Channel)?.channelId
+        )
     }
     val channelListState = rememberLazyListState()
 
@@ -850,6 +859,10 @@ fun ColumnScope.ServerChannelListRenderer(
         items(categorisedChannels?.size ?: 0) {
             when (val channelOrCat = categorisedChannels?.get(it)) {
                 is CategorisedChannelList.Channel -> {
+                    val channelId = channelOrCat.channel.id
+                    val joinedThreadCount = channelId
+                        ?.let { ChannelUtils.joinedThreads(it).size }
+                        ?: 0
                     ChannelItem(
                         channel = channelOrCat.channel,
                         isCurrent = when (currentDestination) {
@@ -877,7 +890,15 @@ fun ColumnScope.ServerChannelListRenderer(
                             serverId
                         ),
                         showVoiceParticipants = true,
-                        onOpenChannelContextSheet = onOpenChannelContextSheet
+                        onOpenChannelContextSheet = onOpenChannelContextSheet,
+                        threadsCollapsed = channelId
+                            ?.let { CollapsedThreadLists.isCollapsed(it) }
+                            ?: false,
+                        onToggleThreads = if (channelId != null && joinedThreadCount > 0) {
+                            { CollapsedThreadLists.toggle(channelId) }
+                        } else {
+                            null
+                        }
                     )
                 }
 
@@ -941,6 +962,8 @@ fun ChannelItem(
     isMuted: Boolean = false,
     appendServerName: Boolean = false,
     showVoiceParticipants: Boolean = false,
+    threadsCollapsed: Boolean = false,
+    onToggleThreads: (() -> Unit)? = null,
     onDestinationChanged: (ChatRouterDestination) -> Unit,
     onOpenChannelContextSheet: (String) -> Unit
 ) {
@@ -1034,6 +1057,25 @@ fun ChannelItem(
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary)
                             .requiredSize(8.dp)
+                    )
+                }
+                if (onToggleThreads != null) {
+                    val toggleLabel = stringResource(
+                        if (threadsCollapsed) R.string.channel_threads_expand
+                        else R.string.channel_threads_collapse
+                    )
+                    Icon(
+                        imageVector = if (threadsCollapsed) {
+                            Icons.Filled.KeyboardArrowRight
+                        } else {
+                            Icons.Filled.KeyboardArrowDown
+                        },
+                        contentDescription = toggleLabel,
+                        tint = LocalContentColor.current.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onToggleThreads)
                     )
                 }
                 channel.voice?.maxUsers?.let { maxUsers ->
