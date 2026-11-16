@@ -102,12 +102,25 @@ object ChannelUtils {
         channel.id?.let { id ->
             val threads = joinedThreads(id)
             val visible = if (id in collapsedThreads) {
-                threads.filter { it.id == activeChannelId }
+                // Collapsing only hides threads that are already read, so
+                // anything unread (or currently open) stays in view
+                threads.filter { thread ->
+                    thread.id == activeChannelId || thread.hasUnreadMessages(channel.server)
+                }
             } else {
                 threads
             }
 
             visible.forEach { output.add(CategorisedChannelList.Thread(it)) }
         }
+    }
+
+    /**
+     * Whether this thread has unread messages for the current user
+     */
+    private fun Channel.hasUnreadMessages(serverId: String?): Boolean {
+        val channelId = id ?: return false
+        val lastMessageId = lastMessageID ?: return false
+        return StoatAPI.unreads.hasUnread(channelId, lastMessageId, serverId)
     }
 }
