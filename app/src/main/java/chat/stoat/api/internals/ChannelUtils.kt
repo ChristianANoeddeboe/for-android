@@ -81,15 +81,19 @@ object ChannelUtils {
     }
 
     /**
-     * Joined, open threads of a channel, most recently active first
+     * Joined, open threads of a channel: pinned threads first, then most
+     * recently active
      */
     fun joinedThreads(channelId: String): List<Channel> {
         return StoatAPI.channelCache.values
             .filter {
                 it.isThread && it.parent == channelId && it.archived != true &&
-                    it.id in StoatAPI.threadMembers
+                    (it.id in StoatAPI.threadMembers || it.pinned == true)
             }
-            .sortedByDescending { it.lastMessageID ?: it.id }
+            .sortedWith(
+                compareByDescending<Channel> { it.pinned == true }
+                    .thenByDescending { it.lastMessageID ?: it.id }
+            )
     }
 
     private fun addWithThreads(
@@ -103,9 +107,11 @@ object ChannelUtils {
             val threads = joinedThreads(id)
             val visible = if (id in collapsedThreads) {
                 // Collapsing only hides threads that are already read, so
-                // anything unread (or currently open) stays in view
+                // anything unread (or currently open, or pinned) stays in view
                 threads.filter { thread ->
-                    thread.id == activeChannelId || thread.hasUnreadMessages(channel.server)
+                    thread.id == activeChannelId ||
+                        thread.pinned == true ||
+                        thread.hasUnreadMessages(channel.server)
                 }
             } else {
                 threads

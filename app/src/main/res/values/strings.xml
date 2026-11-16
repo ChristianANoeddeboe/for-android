@@ -326,6 +326,8 @@
     <string name="thread_unlock">Unlock</string>
     <string name="thread_pin_post">Pin post</string>
     <string name="thread_unpin_post">Unpin post</string>
+    <string name="thread_pin_thread">Pin thread</string>
+    <string name="thread_unpin_thread">Unpin thread</string>
     <string name="thread_rename">Rename</string>
     <string name="thread_edit_tags">Edit tags</string>
     <string name="thread_delete">Delete thread</string>

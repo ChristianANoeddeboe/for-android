@@ -910,6 +910,16 @@ fun ColumnScope.ServerChannelListRenderer(
                     Box(Modifier.padding(start = 24.dp)) {
                         ChannelItem(
                             channel = channelOrCat.thread,
+                            iconType = if (channelOrCat.thread.pinned == true) {
+                                ChannelItemIconType.Painter(
+                                    painterResource(R.drawable.ic_keep_24dp)
+                                )
+                            } else {
+                                ChannelItemIconType.Channel(
+                                    channelOrCat.thread.channelType
+                                        ?: ChannelType.TextChannel
+                                )
+                            },
                             isCurrent = (currentDestination as? ChatRouterDestination.Channel)
                                 ?.channelId == channelOrCat.thread.id,
                             onDestinationChanged = {

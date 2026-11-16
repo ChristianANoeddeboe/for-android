@@ -396,21 +396,28 @@ fun ThreadOptionsSection(threadId: String, onHideSheet: suspend () -> Unit, modi
                 },
                 onClick = { run { editThread(threadId, EditThreadBody(locked = !locked)) } }
             )
-            if (forumPost) {
-                val pinned = thread.pinned == true
-                SheetButton(
-                    leadingContent = {
-                        Icon(
-                            painterResource(if (pinned) R.drawable.ic_keep_off_24dp else R.drawable.ic_keep_24dp),
-                            contentDescription = null
+            val pinned = thread.pinned == true
+            SheetButton(
+                leadingContent = {
+                    Icon(
+                        painterResource(if (pinned) R.drawable.ic_keep_off_24dp else R.drawable.ic_keep_24dp),
+                        contentDescription = null
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        stringResource(
+                            when {
+                                forumPost && pinned -> R.string.thread_unpin_post
+                                forumPost -> R.string.thread_pin_post
+                                pinned -> R.string.thread_unpin_thread
+                                else -> R.string.thread_pin_thread
+                            }
                         )
-                    },
-                    headlineContent = {
-                        Text(stringResource(if (pinned) R.string.thread_unpin_post else R.string.thread_pin_post))
-                    },
-                    onClick = { run { editThread(threadId, EditThreadBody(pinned = !pinned)) } }
-                )
-            }
+                    )
+                },
+                onClick = { run { editThread(threadId, EditThreadBody(pinned = !pinned)) } }
+            )
             SheetButton(
                 leadingContent = {
                     Icon(painterResource(R.drawable.ic_delete_24dp), contentDescription = null)
